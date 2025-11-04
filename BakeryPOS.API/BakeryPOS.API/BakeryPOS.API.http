@@ -1,0 +1,6 @@
+@BakeryPOS.API_HostAddress = http://localhost:5095
+
+GET {{BakeryPOS.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
