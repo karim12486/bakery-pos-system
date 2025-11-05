@@ -11,6 +11,13 @@ namespace BakeryPOS.API.Data
         }
 
         public DbSet<User> Users { get; set; }
+        public DbSet<Product> Products { get; set; }
+        public DbSet<Sale> Sales { get; set; }
+        public DbSet<SaleDetail> SaleDetails { get; set; }
+        public DbSet<StockMovement> StockMovements { get; set; }
+        public DbSet<Report> Reports { get; set; }
+        public DbSet<Customer> Customers { get; set; }
+        public DbSet<CustomerPayment> CustomerPayments { get; set; }
 
         // We will add other DbSet properties here later for Products, Sales, etc.
 
@@ -18,6 +25,20 @@ namespace BakeryPOS.API.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            // This line ensures the StockMovementType enum is stored as a string in the DB (e.g., "Sale", "Addition")
+            // This makes the database much more readable than storing it as a number (0, 1, 2...).
+            modelBuilder.Entity<StockMovement>()
+                .Property(s => s.Type)
+                .HasConversion<string>();
+
+            modelBuilder.Entity<Report>()
+                .Property(r => r.Type)
+                .HasConversion<string>();
+
+            modelBuilder.Entity<Sale>()
+                .Property(s => s.PaymentMethod)
+                .HasConversion<string>();
 
             // --- Seed the first Admin User ---
             var adminUser = new User

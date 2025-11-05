@@ -1,0 +1,11 @@
+﻿namespace BakeryPOS.API.DTOs
+{
+    public class CustomerDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; }
+        public string PhoneNumber { get; set; }
+        public string Address { get; set; }
+        public decimal CurrentBalance { get; set; } // Negative means they owe money
+    }
+}

@@ -1,11 +1,16 @@
-using BakeryPOS.API.Data;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.OpenApi.Models; // Your using statement for Swagger
 using BakeryPOS.API.Core.Interfaces;
+using BakeryPOS.API.Data;
+using BakeryPOS.API.Mappers;
 using BakeryPOS.API.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models; // Your using statement for Swagger
+using System.Reflection;
 using System.Text;
+using System.Text.Json.Serialization;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,10 +36,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-builder.Services.AddControllers();
+builder.Services.AddScoped<IReportGenerationService, ReportGenerationService>();
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<INotificationService, TelegramNotificationService>();
+
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 builder.Services.AddEndpointsApiExplorer();
 
-// Your excellent Swagger configuration
+// Swagger configuration
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo { Title = "BakeryPOS API", Version = "v1" });
@@ -67,8 +80,13 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+builder.Services.AddAutoMapper(cfg =>
+{
+    cfg.AddMaps(typeof(AutoMapperProfiles).Assembly);
+});
 
 
+builder.Services.AddHostedService<ScheduledReportService>();
 
 var app = builder.Build();
 
