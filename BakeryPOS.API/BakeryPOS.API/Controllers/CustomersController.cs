@@ -106,5 +106,54 @@ namespace BakeryPOS.API.Controllers
 
             return Ok(new { message = "Payment recorded successfully.", newBalance = customer.CurrentBalance });
         }
+
+        // PUT: api/customers/5
+        // Updates an existing customer's details.
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateCustomer(int id, CustomerForUpdateDto customerForUpdateDto)
+        {
+            var customerFromDb = await _context.Customers.FindAsync(id);
+
+            if (customerFromDb == null)
+            {
+                return NotFound();
+            }
+
+            // Use AutoMapper to update the entity with the values from the DTO
+            _mapper.Map(customerForUpdateDto, customerFromDb);
+
+            await _context.SaveChangesAsync();
+
+            return NoContent(); // Standard response for a successful update
+        }
+
+        // DELETE: api/customers/5
+        // Deletes a customer.
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteCustomer(int id)
+        {
+            var customerFromDb = await _context.Customers.FindAsync(id);
+
+            if (customerFromDb == null)
+            {
+                return NotFound();
+            }
+
+            // Hard Delete: Before deleting, check if the customer has any sales history.
+            // If they do, a "hard delete" could corrupt historical data.
+            // A "soft delete" (setting an IsActive flag) is often safer.
+            // For now, we will proceed with a hard delete but add a check.
+
+            var hasSales = await _context.Sales.AnyAsync(s => s.CustomerId == id);
+            if (hasSales)
+            {
+                return BadRequest("Cannot delete a customer with existing sales history. Consider deactivating them instead.");
+            }
+
+            _context.Customers.Remove(customerFromDb);
+            await _context.SaveChangesAsync();
+
+            return NoContent(); // Standard response for a successful delete
+        }
     }
 }

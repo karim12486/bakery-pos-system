@@ -11,6 +11,12 @@ namespace BakeryPOS.API.Core.Entities
         [Column(TypeName = "decimal(18, 2)")]
         public decimal TotalAmount { get; set; }
 
+        [Column(TypeName = "decimal(18, 2)")]
+        public decimal DiscountAmount { get; set; } = 0; // The monetary value of the discount applied
+
+        [Column(TypeName = "decimal(18, 2)")]
+        public decimal FinalAmount { get; set; } // The final amount after discount (TotalAmount - DiscountAmount)
+
         public PaymentType PaymentMethod { get; set; }
 
         [Column(TypeName = "decimal(18, 2)")]

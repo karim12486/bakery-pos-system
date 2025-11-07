@@ -2,12 +2,13 @@
 
 namespace BakeryPOS.API.DTOs
 {
-    public class CustomerForCreateDto
+    public class CustomerForUpdateDto
     {
         [Required]
         public string Name { get; set; }
         public string PhoneNumber { get; set; }
         public string Address { get; set; }
+
         [Range(0, 100)]
         public decimal DiscountPercentage { get; set; } = 0;
     }
