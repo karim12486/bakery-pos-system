@@ -29,5 +29,7 @@ namespace BakeryPOS.API.DTOs
         public int StockQuantity { get; set; }
 
         public string? ImageUrl { get; set; }
+        [Required]
+        public int CategoryId { get; set; }
     }
 }

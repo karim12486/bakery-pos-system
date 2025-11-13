@@ -1,4 +1,6 @@
-﻿using BakeryPOS.API.Core.Entities;
+﻿using AutoMapper;
+using BakeryPOS.API.Core.Entities;
+using BakeryPOS.API.Core.Enums;
 using BakeryPOS.API.Core.Interfaces;
 using BakeryPOS.API.Data;
 using BakeryPOS.API.DTOs;
@@ -7,7 +9,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
-using AutoMapper;
 
 namespace BakeryPOS.API.Controllers
 {
@@ -139,6 +140,35 @@ namespace BakeryPOS.API.Controllers
             await _context.SaveChangesAsync();
 
             return Ok("Password updated successfully.");
+        }
+
+        // GET: api/admin/permissions
+        // Gets a list of all available permissions for the UI to build the toggles.
+        [HttpGet("permissions")]
+        public IActionResult GetPermissions()
+        {
+            // Use reflection to get all the values from the UserPermissions enum
+            var permissions = Enum.GetValues(typeof(UserPermissions))
+                .Cast<UserPermissions>()
+                // We exclude "None" and "Admin" as they are special values, not individual permissions
+                .Where(p => p != UserPermissions.None && p != UserPermissions.Admin)
+                .Select(p => new PermissionDto
+                {
+                    Name = p.ToString(), // Gets the string name, e.g., "ApplyDiscounts"
+                    Value = (int)p       // Gets the integer value, e.g., 2
+                })
+                .ToList();
+
+            return Ok(permissions);
+        }
+
+        // DANGEROUS - FOR TESTING ONLY
+        [HttpPost("database/reset")]
+        public async Task<IActionResult> ResetDatabase()
+        {
+            await _context.Database.EnsureDeletedAsync();
+            await _context.Database.MigrateAsync();
+            return Ok("Database has been reset to initial state.");
         }
     }
 }

@@ -22,6 +22,23 @@ namespace BakeryPOS.API.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("BakeryPOS.API.Core.Entities.Category", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Categories");
+                });
+
             modelBuilder.Entity("BakeryPOS.API.Core.Entities.Customer", b =>
                 {
                     b.Property<int>("Id")
@@ -32,6 +49,9 @@ namespace BakeryPOS.API.Migrations
 
                     b.Property<string>("Address")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<decimal>("CurrentBalance")
                         .HasColumnType("decimal(18, 2)");
@@ -83,6 +103,56 @@ namespace BakeryPOS.API.Migrations
                     b.ToTable("CustomerPayments");
                 });
 
+            modelBuilder.Entity("BakeryPOS.API.Core.Entities.Expense", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18, 2)");
+
+                    b.Property<int>("CategoryId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoryId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Expenses");
+                });
+
+            modelBuilder.Entity("BakeryPOS.API.Core.Entities.ExpenseCategory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ExpenseCategories");
+                });
+
             modelBuilder.Entity("BakeryPOS.API.Core.Entities.Product", b =>
                 {
                     b.Property<int>("Id")
@@ -93,6 +163,9 @@ namespace BakeryPOS.API.Migrations
 
                     b.Property<string>("Barcode")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("CategoryId")
+                        .HasColumnType("int");
 
                     b.Property<decimal>("CostPrice")
                         .HasColumnType("decimal(18, 2)");
@@ -125,7 +198,46 @@ namespace BakeryPOS.API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CategoryId");
+
                     b.ToTable("Products");
+                });
+
+            modelBuilder.Entity("BakeryPOS.API.Core.Entities.RemovalRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("ApprovingUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("ProductPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("RequestTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("RequestingUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApprovingUserId");
+
+                    b.HasIndex("RequestingUserId");
+
+                    b.ToTable("RemovalRequests");
                 });
 
             modelBuilder.Entity("BakeryPOS.API.Core.Entities.Report", b =>
@@ -139,7 +251,7 @@ namespace BakeryPOS.API.Migrations
                     b.Property<DateTime>("GeneratedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("ReportDataJson")
+                    b.Property<string>("PdfFilePath")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
@@ -291,18 +403,6 @@ namespace BakeryPOS.API.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Users");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            FullName = "Default Admin",
-                            IsActive = true,
-                            PasswordHash = "$2a$11$j0.Uu8f2oXj0w/K0nQ9vQe2E.u2e/D9sU9vQ.f/gH3vR.p/gI5p/g",
-                            Permissions = -1,
-                            Username = "admin"
-                        });
                 });
 
             modelBuilder.Entity("BakeryPOS.API.Core.Entities.CustomerPayment", b =>
@@ -322,6 +422,53 @@ namespace BakeryPOS.API.Migrations
                     b.Navigation("Customer");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("BakeryPOS.API.Core.Entities.Expense", b =>
+                {
+                    b.HasOne("BakeryPOS.API.Core.Entities.ExpenseCategory", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BakeryPOS.API.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Category");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("BakeryPOS.API.Core.Entities.Product", b =>
+                {
+                    b.HasOne("BakeryPOS.API.Core.Entities.Category", "Category")
+                        .WithMany("Products")
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Category");
+                });
+
+            modelBuilder.Entity("BakeryPOS.API.Core.Entities.RemovalRequest", b =>
+                {
+                    b.HasOne("BakeryPOS.API.Core.Entities.User", "ApprovingUser")
+                        .WithMany()
+                        .HasForeignKey("ApprovingUserId");
+
+                    b.HasOne("BakeryPOS.API.Core.Entities.User", "RequestingUser")
+                        .WithMany()
+                        .HasForeignKey("RequestingUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ApprovingUser");
+
+                    b.Navigation("RequestingUser");
                 });
 
             modelBuilder.Entity("BakeryPOS.API.Core.Entities.Sale", b =>
@@ -377,6 +524,11 @@ namespace BakeryPOS.API.Migrations
                     b.Navigation("Product");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("BakeryPOS.API.Core.Entities.Category", b =>
+                {
+                    b.Navigation("Products");
                 });
 
             modelBuilder.Entity("BakeryPOS.API.Core.Entities.Customer", b =>

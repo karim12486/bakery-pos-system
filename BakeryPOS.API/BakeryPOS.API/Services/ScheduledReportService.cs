@@ -1,7 +1,7 @@
 ﻿using BakeryPOS.API.Core.Entities;
 using BakeryPOS.API.Core.Interfaces;
 using BakeryPOS.API.Data;
-using System.Text;
+using BakeryPOS.API.DTOs;
 using System.Text.Json;
 
 namespace BakeryPOS.API.Services
@@ -10,9 +10,7 @@ namespace BakeryPOS.API.Services
     {
         private readonly ILogger<ScheduledReportService> _logger;
         private readonly IServiceScopeFactory _scopeFactory;
-
-        // The time of day (in UTC) to run the report. 21:00 UTC is 11 PM in Cairo (UTC+2).
-        private const int ReportHourUtc = 23;
+        private const string ReportStorageFolder = "GeneratedReports";
 
         public ScheduledReportService(ILogger<ScheduledReportService> logger, IServiceScopeFactory scopeFactory)
         {
@@ -28,80 +26,76 @@ namespace BakeryPOS.API.Services
             {
                 try
                 {
-                    // 1. Get the Morocco time zone information
                     var moroccoTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Morocco Standard Time");
-
-                    // 2. Get the current time in Morocco
                     var currentTimeInMorocco = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, moroccoTimeZone);
-
-                    // 3. Calculate the next midnight in Morocco
                     var nextMidnightInMorocco = currentTimeInMorocco.Date.AddDays(1);
-
-                    // 4. Calculate the delay until that time
                     var delay = nextMidnightInMorocco - currentTimeInMorocco;
 
-                    // Convert next run time back to UTC for logging
                     var nextRunTimeUtc = TimeZoneInfo.ConvertTimeToUtc(nextMidnightInMorocco, moroccoTimeZone);
-                    _logger.LogInformation("Next daily report will run at: {runTime} (UTC)", nextRunTimeUtc);
+                    _logger.LogInformation("Next report cycle will run at: {runTime} (UTC)", nextRunTimeUtc);
 
-                    // Wait for the calculated delay
                     await Task.Delay(delay, stoppingToken);
 
-                    // --- It's time to run the report! ---
-                    _logger.LogInformation("Generating daily report...");
+                    _logger.LogInformation("Starting scheduled report generation...");
 
-                    // Create a new scope to get our scoped services
                     using (var scope = _scopeFactory.CreateScope())
                     {
                         var reportService = scope.ServiceProvider.GetRequiredService<IReportGenerationService>();
+                        var pdfService = scope.ServiceProvider.GetRequiredService<IPdfGenerationService>();
                         var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
                         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-                        // Generate the report for the day that just ended in Morocco
                         var reportDate = currentTimeInMorocco.Date;
-                        var reportDto = await reportService.GenerateDailySalesReportAsync(reportDate);
 
-                        // Save the report to the database
-                        var newReport = new Report
+                        Directory.CreateDirectory(ReportStorageFolder);
+
+                        // --- Daily Report ---
+                        var dailyReportDto = await reportService.GenerateDailySalesReportAsync(reportDate);
+                        var dailyPdfBytes = pdfService.GenerateDailySalesReport(dailyReportDto);
+                        string dailyReportFileName = $"Daily_Sales_{reportDate:yyyy-MM-dd}.pdf";
+                        string dailyReportFilePath = Path.Combine(ReportStorageFolder, dailyReportFileName);
+                        await File.WriteAllBytesAsync(dailyReportFilePath, dailyPdfBytes, stoppingToken);
+                        await dbContext.Reports.AddAsync(new Report { Type = ReportType.DailySummary, PdfFilePath = dailyReportFilePath });
+                        await notificationService.SendNotificationAsync($"Daily Sales Report for {reportDate:yyyy-MM-dd}", dailyReportFilePath);
+                        _logger.LogInformation("Daily report PDF generated.");
+
+                        // --- Special Product Report ---
+                        var specialReportDto = await reportService.GenerateSpecialProductReportAsync(reportDate);
+                        if (specialReportDto.ProductDetails.Any())
                         {
-                            Type = ReportType.DailySummary,
-                            ReportDataJson = JsonSerializer.Serialize(reportDto)
-                        };
-                        await dbContext.Reports.AddAsync(newReport);
-                        await dbContext.SaveChangesAsync();
-                        _logger.LogInformation("Daily report for {reportDate} saved to database.", reportDate.ToShortDateString());
+                            var specialPdfBytes = pdfService.GenerateSpecialProductReport(specialReportDto);
+                            string specialReportFileName = $"Special_Products_{reportDate:yyyy-MM-dd}.pdf";
+                            string specialReportFilePath = Path.Combine(ReportStorageFolder, specialReportFileName);
+                            await File.WriteAllBytesAsync(specialReportFilePath, specialPdfBytes, stoppingToken);
+                            await dbContext.Reports.AddAsync(new Report { Type = ReportType.ProductPerformance, PdfFilePath = specialReportFilePath });
+                            await notificationService.SendNotificationAsync($"Special Product Report for {reportDate:yyyy-MM-dd}", specialReportFilePath);
+                            _logger.LogInformation("Special Product report PDF generated.");
+                        }
 
-                        // Format and send the notification
-                        var message = FormatReportForTelegram(reportDto);
-                        await notificationService.SendNotificationAsync(message);
-                        _logger.LogInformation("Daily report sent via notification.");
+                        // --- Monthly Report (if it's the 1st of the month) ---
+                        if (currentTimeInMorocco.Day == 1)
+                        {
+                            var previousMonth = currentTimeInMorocco.AddMonths(-1);
+                            var monthlyReportDto = await reportService.GenerateMonthlySalesReportAsync(previousMonth.Year, previousMonth.Month);
+                            var monthlyPdfBytes = pdfService.GenerateMonthlySalesReport(monthlyReportDto);
+                            string monthlyReportFileName = $"Monthly_Sales_{previousMonth:yyyy-MM}.pdf";
+                            string monthlyReportFilePath = Path.Combine(ReportStorageFolder, monthlyReportFileName);
+                            await File.WriteAllBytesAsync(monthlyReportFilePath, monthlyPdfBytes, stoppingToken);
+                            await dbContext.Reports.AddAsync(new Report { Type = ReportType.MonthlySummary, PdfFilePath = monthlyReportFilePath });
+                            await notificationService.SendNotificationAsync($"Monthly Sales Report for {previousMonth:MMMM yyyy}", monthlyReportFilePath);
+                            _logger.LogInformation("Monthly report PDF generated.");
+                        }
+
+                        await dbContext.SaveChangesAsync();
+                        _logger.LogInformation("All generated reports have been saved to the database.");
                     }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "An error occurred in the scheduled report service.");
-                    // Wait for a minute before retrying to avoid fast loop on error
                     await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
                 }
             }
-        }
-
-        private string FormatReportForTelegram(DTOs.DailySalesReportDto report)
-        {
-            var sb = new StringBuilder();
-            sb.AppendLine($"*Daily Sales Report for {report.ReportDate:yyyy-MM-dd}*");
-            sb.AppendLine("------------------------------------");
-            sb.AppendLine($"*Total Sales:* {report.GrandTotalSalesValue:C}");
-            sb.AppendLine($"*Total Transactions:* {report.GrandTotalTransactions}");
-            sb.AppendLine("------------------------------------");
-            sb.AppendLine("*Sales by Cashier:*");
-
-            foreach (var cashierSale in report.SalesByCashier)
-            {
-                sb.AppendLine($"  - {cashierSale.CashierName}: {cashierSale.TotalSalesValue:C} ({cashierSale.TotalTransactions} transactions)");
-            }
-
-            return sb.ToString();
         }
     }
 }

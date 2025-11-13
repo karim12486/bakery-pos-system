@@ -13,8 +13,8 @@
         public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
         public ReportType Type { get; set; }
 
-        // We will store the full report DTO here as a serialized JSON string.
-        // This is very flexible, as different report types have different data structures.
-        public string ReportDataJson { get; set; } = string.Empty;
+        // --- PROPERTY CHANGED ---
+        // We will now store the path to the generated PDF file on the server.
+        public string PdfFilePath { get; set; } = string.Empty;
     }
 }

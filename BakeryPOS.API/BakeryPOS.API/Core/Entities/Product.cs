@@ -17,6 +17,9 @@ namespace BakeryPOS.API.Core.Entities
 
         public bool IsSpecial { get; set; } = false; // Flag to include this in the special report
 
+        public int CategoryId { get; set; }
+        public Category Category { get; set; }
+
         public int StockQuantity { get; set; }
         public string? ImageUrl { get; set; } // Optional image for the POS display
         public bool IsActive { get; set; } = true;

@@ -31,5 +31,7 @@ namespace BakeryPOS.API.DTOs
         public string? ImageUrl { get; set; }
 
         public bool IsActive { get; set; }
+        [Required]
+        public int CategoryId { get; set; }
     }
 }

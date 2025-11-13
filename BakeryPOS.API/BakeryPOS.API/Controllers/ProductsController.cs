@@ -24,13 +24,18 @@ namespace BakeryPOS.API.Controllers
 
         // GET: api/products
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<ProductDto>>> GetProducts()
+        public async Task<ActionResult<IEnumerable<ProductDto>>> GetProducts([FromQuery] int? categoryId)
         {
-            var products = await _context.Products
-                .Where(p => p.IsActive)
-                .ToListAsync();
+            // Start with a query that includes the Category for mapping the name
+            var query = _context.Products.Include(p => p.Category).Where(p => p.IsActive);
 
-            // 4. REPLACE MANUAL MAPPING WITH AUTOMAPPER
+            // Add category filter if provided
+            if (categoryId.HasValue)
+            {
+                query = query.Where(p => p.CategoryId == categoryId.Value);
+            }
+
+            var products = await query.OrderBy(p => p.Name).ToListAsync();
             var productDtos = _mapper.Map<IEnumerable<ProductDto>>(products);
 
             return Ok(productDtos);
@@ -58,6 +63,11 @@ namespace BakeryPOS.API.Controllers
         [Authorize]
         public async Task<ActionResult<ProductDto>> CreateProduct(ProductForCreateDto productForCreateDto)
         {
+            var categoryExists = await _context.Categories.AnyAsync(c => c.Id == productForCreateDto.CategoryId);
+            if (!categoryExists)
+            {
+                return BadRequest($"Category with ID {productForCreateDto.CategoryId} does not exist.");
+            }
             // 6. USE AUTOMAPPER TO MAP FROM DTO TO ENTITY
             var newProduct = _mapper.Map<Product>(productForCreateDto);
 
@@ -83,6 +93,12 @@ namespace BakeryPOS.API.Controllers
             if (productFromDb == null)
             {
                 return NotFound();
+            }
+
+            var categoryExists = await _context.Categories.AnyAsync(c => c.Id == productForUpdateDto.CategoryId);
+            if (!categoryExists)
+            {
+                return BadRequest($"Category with ID {productForUpdateDto.CategoryId} does not exist.");
             }
 
             // 7. USE AUTOMAPPER TO MAP UPDATES FROM DTO TO THE EXISTING ENTITY

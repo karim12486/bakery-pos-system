@@ -1,4 +1,6 @@
-﻿namespace BakeryPOS.API.DTOs
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace BakeryPOS.API.DTOs
 {
     public class ProductDto
     {
@@ -10,5 +12,7 @@
         public int StockQuantity { get; set; }
         public string? ImageUrl { get; set; }
         public bool IsActive { get; set; }
+        public int CategoryId { get; set; }
+        public string CategoryName { get; set; } // Also useful to return the name
     }
 }

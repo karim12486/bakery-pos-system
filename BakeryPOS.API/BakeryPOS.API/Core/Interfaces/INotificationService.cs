@@ -1,7 +1,5 @@
-﻿namespace BakeryPOS.API.Core.Interfaces
+﻿public interface INotificationService
 {
-    public interface INotificationService
-    {
-        Task SendNotificationAsync(string message);
-    }
+    // Old method: Task SendNotificationAsync(string message);
+    Task SendNotificationAsync(string caption, string? filePath = null); // New method
 }

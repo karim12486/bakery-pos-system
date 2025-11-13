@@ -6,8 +6,8 @@ namespace BakeryPOS.API.DTOs
     {
         [Required]
         public string Name { get; set; }
-        public string PhoneNumber { get; set; }
-        public string Address { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? Address { get; set; }
         [Range(0, 100)]
         public decimal DiscountPercentage { get; set; } = 0;
     }

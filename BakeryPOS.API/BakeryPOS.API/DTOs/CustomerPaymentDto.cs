@@ -7,6 +7,6 @@ namespace BakeryPOS.API.DTOs
         [Required]
         [Range(0.01, 999999)]
         public decimal AmountPaid { get; set; }
-        public string Notes { get; set; }
+        public string? Notes { get; set; }
     }
 }

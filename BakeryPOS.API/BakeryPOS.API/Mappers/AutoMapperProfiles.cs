@@ -13,7 +13,8 @@ namespace BakeryPOS.API.Mappers
             // "You can map from a Product object to a ProductDto object."
             // Because the property names are identical, AutoMapper will
             // handle all the property mapping automatically.
-            CreateMap<Product, ProductDto>();
+            CreateMap<Product, ProductDto>()
+                .ForMember(dest => dest.CategoryName, opt => opt.MapFrom(src => src.Category.Name));
 
             // We also need mappings for our Create and Update DTOs back to the Product entity
             CreateMap<ProductForCreateDto, Product>();
@@ -48,6 +49,20 @@ namespace BakeryPOS.API.Mappers
                 .ForMember(dest => dest.Items, opt => opt.MapFrom(src => src.SaleDetails))
                 // We also need to map the enum to its string representation
                 .ForMember(dest => dest.PaymentMethod, opt => opt.MapFrom(src => src.PaymentMethod.ToString()));
+
+            CreateMap<Category, CategoryDto>();
+            CreateMap<CategoryForCreateDto, Category>();
+
+            // Expense Category Mappings
+            CreateMap<ExpenseCategory, ExpenseCategoryDto>();
+            CreateMap<ExpenseCategoryForCreateDto, ExpenseCategory>();
+
+            // Expense Mappings
+            CreateMap<Expense, ExpenseDto>()
+                .ForMember(dest => dest.CategoryName, opt => opt.MapFrom(src => src.Category.Name))
+                .ForMember(dest => dest.RecordedByUserName, opt => opt.MapFrom(src => src.User.FullName));
+
+            CreateMap<ExpenseForCreateDto, Expense>();
         }
     }
 }

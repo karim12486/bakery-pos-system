@@ -17,29 +17,33 @@ namespace BakeryPOS.API.Services
             _chatId = config["TelegramSettings:ChatId"];
         }
 
-        public async Task SendNotificationAsync(string message)
+        public async Task SendNotificationAsync(string caption, string? filePath = null)
         {
-            // Construct the URL for the Telegram Bot API
-            var url = $"https://api.telegram.org/bot{_botToken}/sendMessage";
-
-            // Create the payload to send
-            var payload = new
-            {
-                chat_id = _chatId,
-                text = message,
-                parse_mode = "Markdown" // Optional: allows for formatting like *bold* and _italic_
-            };
-
             var httpClient = _httpClientFactory.CreateClient();
-            var jsonPayload = JsonSerializer.Serialize(payload);
-            var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
-            // Send the request
-            var response = await httpClient.PostAsync(url, content);
+            // If a file path is provided, send it as a document
+            if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
+            {
+                var url = $"https://api.telegram.org/bot{_botToken}/sendDocument";
 
-            // You can add error handling here if you want to check if the message was sent successfully
-            // For now, we'll assume it works.
-            // response.EnsureSuccessStatusCode();
+                using var form = new MultipartFormDataContent();
+                form.Add(new StringContent(_chatId), "chat_id");
+                form.Add(new StringContent(caption), "caption");
+
+                await using var fileStream = File.OpenRead(filePath);
+                form.Add(new StreamContent(fileStream), "document", Path.GetFileName(filePath));
+
+                var response = await httpClient.PostAsync(url, form);
+                // Optional: check response.IsSuccessStatusCode
+            }
+            else // Otherwise, just send a text message
+            {
+                var url = $"https://api.telegram.org/bot{_botToken}/sendMessage";
+                var payload = new { chat_id = _chatId, text = caption };
+                var jsonPayload = JsonSerializer.Serialize(payload);
+                var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+                var response = await httpClient.PostAsync(url, content);
+            }
         }
     }
 }
