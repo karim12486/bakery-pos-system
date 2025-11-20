@@ -48,6 +48,29 @@ namespace BakeryPOS.API.Controllers
             return Ok(_mapper.Map<CategoryDto>(newCategory));
         }
 
-        // You can add PUT and DELETE endpoints here later if needed
+        // PUT: api/categories/{id}
+        [HttpPut("{id}")]
+        [Authorize]
+        public async Task<IActionResult> UpdateCategory(int id, CategoryForCreateDto dto)
+        {
+            var category = await _context.Categories.FindAsync(id);
+            if (category == null) return NotFound();
+            category.Name = dto.Name;
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
+        // DELETE: api/categories/{id}
+        [HttpDelete("{id}")]
+        [Authorize]
+        public async Task<IActionResult> DeleteCategory(int id)
+        {
+            var category = await _context.Categories.FindAsync(id);
+            if (category == null) return NotFound();
+            // Optional: Check if products exist in this category before deleting
+            _context.Categories.Remove(category);
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
     }
 }

@@ -7,5 +7,7 @@
         public string CashierName { get; set; } = string.Empty;
         public string? CustomerName { get; set; } // Nullable
         public decimal FinalAmount { get; set; }
+        public decimal AmountPaid { get; set; }
+        public decimal AmountOwed { get; set; }
     }
 }

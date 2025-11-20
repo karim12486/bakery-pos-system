@@ -16,5 +16,6 @@ namespace BakeryPOS.API.Core.Entities
         public decimal DiscountPercentage { get; set; } = 0; // Represents the discount percentage for this specific customer (e.g., 15.00 for 15%)
         public ICollection<Sale> Sales { get; set; } = new List<Sale>();
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public string? ImageUrl { get; set; }
     }
 }

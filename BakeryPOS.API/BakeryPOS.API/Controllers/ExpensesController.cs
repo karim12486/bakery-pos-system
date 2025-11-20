@@ -25,6 +25,7 @@ namespace BakeryPOS.API.Controllers
 
         // --- Expense Category Endpoints ---
 
+        // GET: api/Expenses/categories
         [HttpGet("categories")]
         public async Task<ActionResult<IEnumerable<ExpenseCategoryDto>>> GetCategories()
         {
@@ -32,6 +33,7 @@ namespace BakeryPOS.API.Controllers
             return Ok(_mapper.Map<IEnumerable<ExpenseCategoryDto>>(categories));
         }
 
+        // POST: api/Expenses/categories
         [HttpPost("categories")]
         public async Task<ActionResult<ExpenseCategoryDto>> CreateCategory(ExpenseCategoryForCreateDto categoryDto)
         {
@@ -46,15 +48,21 @@ namespace BakeryPOS.API.Controllers
 
         // --- Expense Endpoints ---
 
+        // GET: api/Expenses
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<ExpenseDto>>> GetExpenses([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        public async Task<ActionResult<IEnumerable<ExpenseDto>>> GetExpenses([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string? search)
         {
             var query = _context.Expenses.AsQueryable();
 
-            if (startDate.HasValue)
-                query = query.Where(e => e.Date >= startDate.Value.Date);
-            if (endDate.HasValue)
-                query = query.Where(e => e.Date < endDate.Value.Date.AddDays(1));
+            if (startDate.HasValue) query = query.Where(e => e.Date >= startDate.Value.Date);
+            if (endDate.HasValue) query = query.Where(e => e.Date < endDate.Value.Date.AddDays(1));
+
+            // --- NEW SEARCH LOGIC ---
+            if (!string.IsNullOrEmpty(search))
+            {
+                search = search.ToLower();
+                query = query.Where(e => e.Description.ToLower().Contains(search));
+            }
 
             var expenses = await query
                 .Include(e => e.Category)
@@ -65,6 +73,7 @@ namespace BakeryPOS.API.Controllers
             return Ok(_mapper.Map<IEnumerable<ExpenseDto>>(expenses));
         }
 
+        // POST: api/Expenses
         [HttpPost]
         public async Task<ActionResult<ExpenseDto>> CreateExpense(ExpenseForCreateDto expenseDto)
         {
@@ -93,6 +102,7 @@ namespace BakeryPOS.API.Controllers
             return Ok(_mapper.Map<ExpenseDto>(expenseToReturn));
         }
 
+        // PUT: api/Expenses/5
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateExpense(int id, ExpenseForCreateDto expenseDto)
         {
@@ -110,6 +120,7 @@ namespace BakeryPOS.API.Controllers
             return NoContent();
         }
 
+        // DELETE: api/Expenses/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteExpense(int id)
         {

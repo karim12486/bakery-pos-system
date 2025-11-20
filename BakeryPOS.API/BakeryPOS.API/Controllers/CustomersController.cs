@@ -38,19 +38,55 @@ namespace BakeryPOS.API.Controllers
         }
 
         // GET: api/customers/5
-        // Gets details for a single customer.
+        // Gets detailed information for a single customer, including calculated stats.
         [HttpGet("{id}")]
-        public async Task<ActionResult<CustomerDto>> GetCustomer(int id)
+        public async Task<ActionResult<CustomerDetailDto>> GetCustomer(int id)
         {
-            var customer = await _context.Customers.FindAsync(id);
+            var customer = await _context.Customers
+                .Include(c => c.Sales).ThenInclude(s => s.SaleDetails).ThenInclude(sd => sd.Product)
+                .FirstOrDefaultAsync(c => c.Id == id);
 
-            if (customer == null)
-            {
-                return NotFound();
-            }
+            if (customer == null) return NotFound();
 
-            var customerDto = _mapper.Map<CustomerDto>(customer);
-            return Ok(customerDto);
+            var dto = _mapper.Map<CustomerDetailDto>(customer);
+
+            // 1. Monthly Spending Trend (Last 12 months)
+            dto.MonthlySpending = customer.Sales
+                .GroupBy(s => new { s.SaleDate.Year, s.SaleDate.Month })
+                .Select(g => new CustomerMonthlySpendDto
+                {
+                    Month = new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMM"),
+                    Amount = g.Sum(s => s.FinalAmount)
+                })
+                .ToList();
+
+            // 2. Payment Methods Pie Chart
+            dto.PaymentMethods = customer.Sales
+                .GroupBy(s => s.PaymentMethod)
+                .Select(g => new CustomerPaymentMethodDto
+                {
+                    Method = g.Key.ToString(),
+                    Count = g.Count()
+                })
+                .ToList();
+
+            // 3. Transaction History
+            dto.Transactions = customer.Sales
+                .OrderByDescending(s => s.SaleDate)
+                .Take(10) // Last 10 transactions
+                .Select(s => new CustomerTransactionDto
+                {
+                    Date = s.SaleDate,
+                    Total = s.FinalAmount,
+                    Discount = s.DiscountAmount,
+                    Paid = s.AmountPaid,
+                    PaymentType = s.PaymentMethod.ToString(),
+                    // Helper to format string "3x Prod A, 2x Prod B"
+                    ItemsSummary = string.Join(", ", s.SaleDetails.Select(sd => $"{sd.Quantity}x {sd.Product.Name}"))
+                })
+                .ToList();
+
+            return Ok(dto);
         }
 
         // POST: api/customers

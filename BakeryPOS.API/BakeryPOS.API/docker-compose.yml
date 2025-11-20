@@ -1,5 +1,4 @@
-﻿version: '3.8'
-
+﻿
 services:
   bakerypos.api:
     image: ${DOCKER_REGISTRY-}bakeryposapi

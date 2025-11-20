@@ -1,12 +1,9 @@
 ﻿namespace BakeryPOS.API.DTOs
 {
-    public class UserDto
+    public class UserLoginPreviewDto
     {
         public string Username { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
-        public string Token { get; set; } = string.Empty;
-        public string Role { get; set; }
-        public List<string> Permissions { get; set; }
         public string? ImageUrl { get; set; }
     }
 }

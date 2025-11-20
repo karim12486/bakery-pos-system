@@ -131,5 +131,30 @@ namespace BakeryPOS.API.Controllers
 
             return NoContent(); // Returns a 204 No Content response
         }
+
+        // GET: api/products?categoryId=1&search=cake
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<ProductDto>>> GetProducts([FromQuery] int? categoryId, [FromQuery] string? search)
+        {
+            var query = _context.Products.Include(p => p.Category).Where(p => p.IsActive);
+
+            if (categoryId.HasValue)
+            {
+                query = query.Where(p => p.CategoryId == categoryId.Value);
+            }
+
+            // --- NEW SEARCH LOGIC ---
+            if (!string.IsNullOrEmpty(search))
+            {
+                search = search.ToLower();
+                // Search by Name OR Barcode
+                query = query.Where(p => p.Name.ToLower().Contains(search) || (p.Barcode != null && p.Barcode.Contains(search)));
+            }
+
+            var products = await query.OrderBy(p => p.Name).ToListAsync();
+            var productDtos = _mapper.Map<IEnumerable<ProductDto>>(products);
+
+            return Ok(productDtos);
+        }
     }
 }

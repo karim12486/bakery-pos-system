@@ -160,7 +160,7 @@ using (var scope = app.Services.CreateScope())
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
- app.UseSwagger();
+    app.UseSwagger();
  // Your excellent Swagger UI configuration
  app.UseSwaggerUI(c =>
  {
@@ -176,6 +176,8 @@ app.UseCors(MyAllowSpecificOrigins);
 app.UseAuthentication();
 
 app.UseAuthorization();
+
+app.UseStaticFiles();
 
 app.MapControllers();
 

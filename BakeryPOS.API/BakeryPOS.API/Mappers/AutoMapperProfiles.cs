@@ -63,6 +63,12 @@ namespace BakeryPOS.API.Mappers
                 .ForMember(dest => dest.RecordedByUserName, opt => opt.MapFrom(src => src.User.FullName));
 
             CreateMap<ExpenseForCreateDto, Expense>();
+
+            CreateMap<Customer, CustomerDetailDto>()
+                // We tell AutoMapper how to calculate each of the special fields
+                .ForMember(dest => dest.TotalSpent, opt => opt.MapFrom(src => src.Sales.Sum(s => s.FinalAmount)))
+                .ForMember(dest => dest.TotalDiscount, opt => opt.MapFrom(src => src.Sales.Sum(s => s.DiscountAmount)))
+                .ForMember(dest => dest.OutstandingBalance, opt => opt.MapFrom(src => src.CurrentBalance < 0 ? src.CurrentBalance * -1 : 0));
         }
     }
 }

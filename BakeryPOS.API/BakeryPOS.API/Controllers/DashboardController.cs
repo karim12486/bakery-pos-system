@@ -33,6 +33,8 @@ namespace BakeryPOS.API.Controllers
                 .Where(c => c.CreatedAt >= startOfWeek) // Assumes you add a CreatedAt to Customer
                 .CountAsync();
 
+
+
             var summary = new DashboardSummaryDto
             {
                 TodaysSales = todaysSales.Sum(s => s.FinalAmount),
@@ -40,6 +42,21 @@ namespace BakeryPOS.API.Controllers
                 DiscountsAppliedToday = todaysSales.Sum(s => s.DiscountAmount),
                 NewCustomersThisWeek = newCustomersThisWeek
             };
+
+            var yesterdaySales = await _context.Sales
+                .Where(s => s.SaleDate >= today.AddDays(-1) && s.SaleDate < today)
+                .SumAsync(s => s.FinalAmount);
+            var salesChange = CalculatePercentageChange(summary.TodaysSales, yesterdaySales);
+
+            // 2. Clients Comparison (This Week vs Last Week)
+            var lastWeekStart = startOfWeek.AddDays(-7);
+            var newClientsLastWeek = await _context.Customers
+                .Where(c => c.CreatedAt >= lastWeekStart && c.CreatedAt < startOfWeek)
+                .CountAsync();
+            var clientsChange = CalculatePercentageChange(summary.NewCustomersThisWeek, newClientsLastWeek);
+
+            summary.SalesChangePercentage = salesChange;
+            summary.ClientsChangePercentage = clientsChange;
 
             return Ok(summary);
         }
@@ -204,6 +221,12 @@ namespace BakeryPOS.API.Controllers
                 .ToListAsync();
 
             return Ok(topClients);
+        }
+
+        private decimal CalculatePercentageChange(decimal current, decimal previous)
+        {
+            if (previous == 0) return current > 0 ? 100 : 0;
+            return Math.Round(((current - previous) / previous) * 100, 1);
         }
     }
 }

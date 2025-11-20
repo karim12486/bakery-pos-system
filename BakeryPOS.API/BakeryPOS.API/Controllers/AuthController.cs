@@ -50,15 +50,47 @@ namespace BakeryPOS.API.Controllers
                 return Unauthorized("Invalid username or password.");
             }
 
+            // Determine Role based on permissions (Simple logic)
+            string role = user.Permissions.HasFlag(Core.Enums.UserPermissions.Admin) ? "Admin" : "Cashier";
+
+            // Convert Enum flags to a list of strings
+            var permissionsList = Enum.GetValues(typeof(Core.Enums.UserPermissions))
+                .Cast<Core.Enums.UserPermissions>()
+                .Where(p => user.Permissions.HasFlag(p) && p != Core.Enums.UserPermissions.None && p != Core.Enums.UserPermissions.Admin)
+                .Select(p => p.ToString())
+                .ToList();
+
             // 5. If everything is correct, create and return the UserDto with a token
             var userDto = new UserDto
             {
                 Username = user.Username,
                 FullName = user.FullName,
-                Token = _tokenService.CreateToken(user)
+                Token = _tokenService.CreateToken(user),
+                Role = role,
+                Permissions = permissionsList,
+                ImageUrl = user.ImageUrl
             };
 
             return Ok(userDto);
+        }
+
+        // GET: api/auth/users
+        // Public endpoint to get users for the login screen dropdown
+        [HttpGet("users")]
+        public async Task<ActionResult<IEnumerable<UserLoginPreviewDto>>> GetUsersForLogin()
+        {
+            var users = await _context.Users
+                .Where(u => u.IsActive) // Only show active users
+                .OrderBy(u => u.FullName) // Sort alphabetically
+                .Select(u => new UserLoginPreviewDto
+                {
+                    Username = u.Username,
+                    FullName = u.FullName,
+                    ImageUrl = u.ImageUrl
+                })
+                .ToListAsync();
+
+            return Ok(users);
         }
     }
 }

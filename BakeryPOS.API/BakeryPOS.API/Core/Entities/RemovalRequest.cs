@@ -1,4 +1,6 @@
-﻿namespace BakeryPOS.API.Core.Entities
+﻿using System.ComponentModel.DataAnnotations.Schema;
+
+namespace BakeryPOS.API.Core.Entities
 {
     public enum RequestStatus
     {
@@ -16,6 +18,8 @@
         // For now, let's keep it simple: a product name and price.
         // In a real system, you might link this to a temporary "cart item ID".
         public string ProductName { get; set; }
+
+        [Column(TypeName = "decimal(18, 2)")]
         public decimal ProductPrice { get; set; }
 
         // Who requested it?
