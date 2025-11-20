@@ -8,7 +8,7 @@ namespace BakeryPOS.API.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize] // All dashboard actions should be protected
+    [Authorize]
     public class DashboardController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -19,47 +19,124 @@ namespace BakeryPOS.API.Controllers
         }
 
         // GET: api/dashboard/summary
+        // Returns the data for the 4 main cards at the top of the dashboard
         [HttpGet("summary")]
         public async Task<ActionResult<DashboardSummaryDto>> GetSummary()
         {
             var today = DateTime.UtcNow.Date;
-            var startOfWeek = today.AddDays(-(int)today.DayOfWeek); // Assumes Sunday is the start of the week
+            var yesterday = today.AddDays(-1);
 
-            var todaysSales = await _context.Sales
+            // Calculate start of this week (assuming Sunday start)
+            var startOfThisWeek = today.AddDays(-(int)today.DayOfWeek);
+            var startOfLastWeek = startOfThisWeek.AddDays(-7);
+
+            // --- 1. Sales & Transactions (Today vs Yesterday) ---
+            var todaysSalesData = await _context.Sales
                 .Where(s => s.SaleDate >= today && s.SaleDate < today.AddDays(1))
+                .Select(s => new { s.FinalAmount })
                 .ToListAsync();
 
-            var newCustomersThisWeek = await _context.Customers
-                .Where(c => c.CreatedAt >= startOfWeek) // Assumes you add a CreatedAt to Customer
-                .CountAsync();
+            var yesterdaysSalesData = await _context.Sales
+                .Where(s => s.SaleDate >= yesterday && s.SaleDate < today)
+                .Select(s => new { s.FinalAmount })
+                .ToListAsync();
 
+            decimal todaysTotal = todaysSalesData.Sum(s => s.FinalAmount);
+            decimal yesterdaysTotal = yesterdaysSalesData.Sum(s => s.FinalAmount);
+            int todaysCount = todaysSalesData.Count;
+            int yesterdaysCount = yesterdaysSalesData.Count;
 
+            // --- 2. New Clients (This Week vs Last Week) ---
+            var newClientsThisWeek = await _context.Customers
+                .CountAsync(c => c.CreatedAt >= startOfThisWeek);
 
+            var newClientsLastWeek = await _context.Customers
+                .CountAsync(c => c.CreatedAt >= startOfLastWeek && c.CreatedAt < startOfThisWeek);
+
+            // --- 3. Discounts (This Week vs Last Week) ---
+            var discountsThisWeek = await _context.Sales
+                .Where(s => s.SaleDate >= startOfThisWeek)
+                .SumAsync(s => s.DiscountAmount);
+
+            var discountsLastWeek = await _context.Sales
+                .Where(s => s.SaleDate >= startOfLastWeek && s.SaleDate < startOfThisWeek)
+                .SumAsync(s => s.DiscountAmount);
+
+            // --- Build DTO ---
             var summary = new DashboardSummaryDto
             {
-                TodaysSales = todaysSales.Sum(s => s.FinalAmount),
-                TodaysTransactions = todaysSales.Count,
-                DiscountsAppliedToday = todaysSales.Sum(s => s.DiscountAmount),
-                NewCustomersThisWeek = newCustomersThisWeek
+                // Sales
+                TodaysSales = todaysTotal,
+                SalesChangePercentage = CalculatePercentageChange(todaysTotal, yesterdaysTotal),
+
+                // Transactions
+                TodaysTransactions = todaysCount,
+                TransactionsChangePercentage = CalculatePercentageChange(todaysCount, yesterdaysCount),
+
+                // Clients
+                NewClientsThisWeek = newClientsThisWeek,
+                ClientsChangePercentage = CalculatePercentageChange(newClientsThisWeek, newClientsLastWeek),
+
+                // Discounts
+                DiscountsThisWeek = discountsThisWeek,
+                DiscountsChangePercentage = CalculatePercentageChange(discountsThisWeek, discountsLastWeek)
             };
-
-            var yesterdaySales = await _context.Sales
-                .Where(s => s.SaleDate >= today.AddDays(-1) && s.SaleDate < today)
-                .SumAsync(s => s.FinalAmount);
-            var salesChange = CalculatePercentageChange(summary.TodaysSales, yesterdaySales);
-
-            // 2. Clients Comparison (This Week vs Last Week)
-            var lastWeekStart = startOfWeek.AddDays(-7);
-            var newClientsLastWeek = await _context.Customers
-                .Where(c => c.CreatedAt >= lastWeekStart && c.CreatedAt < startOfWeek)
-                .CountAsync();
-            var clientsChange = CalculatePercentageChange(summary.NewCustomersThisWeek, newClientsLastWeek);
-
-            summary.SalesChangePercentage = salesChange;
-            summary.ClientsChangePercentage = clientsChange;
 
             return Ok(summary);
         }
+
+        // Helper function to calculate percentage change safely
+        private decimal CalculatePercentageChange(decimal current, decimal previous)
+        {
+            if (previous == 0) return current > 0 ? 100 : 0;
+            return Math.Round(((current - previous) / previous) * 100, 1);
+        }
+
+
+        // GET: api/dashboard/notifications
+        // Returns alerts for low stock and pending payments
+        [HttpGet("notifications")]
+        public async Task<IActionResult> GetNotifications()
+        {
+            var notifications = new List<object>();
+
+            // 1. Low Stock Alerts (e.g., less than 10 items)
+            var lowStockProducts = await _context.Products
+                .Where(p => p.IsActive && p.StockQuantity < 10)
+                .Select(p => new { p.Name, p.StockQuantity })
+                .ToListAsync();
+
+            foreach (var p in lowStockProducts)
+            {
+                notifications.Add(new
+                {
+                    type = "LowStock",
+                    message = $"{p.Name} is running low ({p.StockQuantity} left).",
+                    severity = "warning",
+                    time = DateTime.UtcNow
+                });
+            }
+
+            // 2. Pending Payments Alerts (Customers who owe money)
+            var debtCustomers = await _context.Customers
+                .Where(c => c.CurrentBalance < 0) // Negative balance = debt
+                .Select(c => new { c.Name, c.CurrentBalance })
+                .ToListAsync();
+
+            foreach (var c in debtCustomers)
+            {
+                notifications.Add(new
+                {
+                    type = "PendingPayment",
+                    message = $"{c.Name} has an outstanding balance of {Math.Abs(c.CurrentBalance):C}.",
+                    severity = "danger",
+                    time = DateTime.UtcNow
+                });
+            }
+
+            return Ok(notifications);
+        }
+
 
         // GET: api/dashboard/topselling
         [HttpGet("topselling")]
@@ -67,27 +144,22 @@ namespace BakeryPOS.API.Controllers
         {
             // Query all sale details
             var topProducts = await _context.SaleDetails
-                .Include(sd => sd.Product) // We need the product's name
-                                           // Group all sale details by the ProductId
+                .Include(sd => sd.Product)
                 .GroupBy(sd => new { sd.ProductId, sd.Product.Name })
-                // From each group, create a new TopSellingProductDto
                 .Select(group => new TopSellingProductDto
                 {
                     ProductId = group.Key.ProductId,
                     ProductName = group.Key.Name,
-                    // Sum the quantity of all items in the group to get total units sold
                     TotalSold = group.Sum(sd => sd.Quantity),
-                    // Sum the (quantity * unit price) for all items to get total revenue
                     TotalRevenue = group.Sum(sd => sd.Quantity * sd.UnitPrice)
                 })
-                // Order the results by the highest revenue first
                 .OrderByDescending(p => p.TotalRevenue)
-                // Take only the top 'count' products (defaults to 5)
                 .Take(count)
                 .ToListAsync();
 
             return Ok(topProducts);
         }
+
 
         // GET: api/dashboard/salesovertime?period=week
         [HttpGet("salesovertime")]
@@ -99,9 +171,8 @@ namespace BakeryPOS.API.Controllers
             switch (period.ToLower())
             {
                 case "year":
-                    // Get the raw data from the DB first
                     var yearlyData = await _context.Sales
-                        .Where(s => s.SaleDate >= today.AddMonths(-12))
+                        .Where(s => s.SaleDate >= today.AddYears(-1))
                         .GroupBy(s => new { s.SaleDate.Year, s.SaleDate.Month })
                         .Select(group => new
                         {
@@ -109,19 +180,18 @@ namespace BakeryPOS.API.Controllers
                             Month = group.Key.Month,
                             TotalSales = group.Sum(s => s.FinalAmount)
                         })
-                        .OrderBy(s => s.Year).ThenBy(s => s.Month)
                         .ToListAsync();
 
-                    // Now, format the data in C#
                     salesData = yearlyData.Select(s => new SalesDataPointDto
                     {
                         Label = new DateTime(s.Year, s.Month, 1).ToString("MMM yyyy"),
                         TotalSales = s.TotalSales
-                    }).ToList();
+                    })
+                    .OrderBy(s => DateTime.Parse(s.Label))
+                    .ToList();
                     break;
 
                 case "month":
-                    // Get the raw data
                     var monthlyData = await _context.Sales
                         .Where(s => s.SaleDate >= today.AddDays(-30))
                         .GroupBy(s => s.SaleDate.Date)
@@ -130,20 +200,19 @@ namespace BakeryPOS.API.Controllers
                             Date = group.Key,
                             TotalSales = group.Sum(s => s.FinalAmount)
                         })
-                        .OrderBy(s => s.Date)
                         .ToListAsync();
 
-                    // Format in C#
                     salesData = monthlyData.Select(s => new SalesDataPointDto
                     {
                         Label = s.Date.ToString("yyyy-MM-dd"),
                         TotalSales = s.TotalSales
-                    }).ToList();
+                    })
+                    .OrderBy(s => s.Label)
+                    .ToList();
                     break;
 
                 case "week":
                 default:
-                    // Get the raw data from the DB
                     var weeklyData = await _context.Sales
                         .Where(s => s.SaleDate >= today.AddDays(-7))
                         .GroupBy(s => s.SaleDate.Date)
@@ -152,15 +221,15 @@ namespace BakeryPOS.API.Controllers
                             Date = group.Key,
                             TotalSales = group.Sum(s => s.FinalAmount)
                         })
-                        .OrderBy(s => s.Date) // Order by date first
                         .ToListAsync();
 
-                    // Now, format the data in C#
                     salesData = weeklyData.Select(s => new SalesDataPointDto
                     {
-                        Label = s.Date.DayOfWeek.ToString(), // This C# method now works
+                        Label = s.Date.DayOfWeek.ToString(),
                         TotalSales = s.TotalSales
-                    }).ToList();
+                    })
+                    .OrderBy(s => s.Label) // Note: Sorting day names alphabetically isn't ideal, better to sort by Date in frontend
+                    .ToList();
                     break;
             }
 
@@ -171,16 +240,9 @@ namespace BakeryPOS.API.Controllers
         [HttpGet("cashierperformance")]
         public async Task<ActionResult<IEnumerable<CashierPerformanceDto>>> GetCashierPerformance([FromQuery] string period = "today")
         {
-            // Define the date range based on the period
             var startDate = DateTime.UtcNow.Date;
-            if (period.ToLower() == "week")
-            {
-                startDate = DateTime.UtcNow.Date.AddDays(-7);
-            }
-            else if (period.ToLower() == "month")
-            {
-                startDate = DateTime.UtcNow.Date.AddDays(-30);
-            }
+            if (period.ToLower() == "week") startDate = DateTime.UtcNow.Date.AddDays(-7);
+            else if (period.ToLower() == "month") startDate = DateTime.UtcNow.Date.AddDays(-30);
 
             var performanceData = await _context.Sales
                 .Include(s => s.User)
@@ -204,16 +266,12 @@ namespace BakeryPOS.API.Controllers
         public async Task<ActionResult<IEnumerable<TopClientDto>>> GetTopClients([FromQuery] int count = 5)
         {
             var topClients = await _context.Customers
-                // We are querying the Customers table directly
                 .Select(c => new TopClientDto
                 {
                     CustomerId = c.Id,
                     CustomerName = c.Name,
-                    // For each customer, calculate the sum of FinalAmount from their related sales
                     TotalSpent = c.Sales.Sum(s => s.FinalAmount),
-                    // Count the number of sales they have made
                     TotalOrders = c.Sales.Count(),
-                    // Get their current outstanding balance (we only care if they owe money)
                     OutstandingBalance = c.CurrentBalance < 0 ? c.CurrentBalance * -1 : 0
                 })
                 .OrderByDescending(c => c.TotalSpent)
@@ -221,12 +279,6 @@ namespace BakeryPOS.API.Controllers
                 .ToListAsync();
 
             return Ok(topClients);
-        }
-
-        private decimal CalculatePercentageChange(decimal current, decimal previous)
-        {
-            if (previous == 0) return current > 0 ? 100 : 0;
-            return Math.Round(((current - previous) / previous) * 100, 1);
         }
     }
 }

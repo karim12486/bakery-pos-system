@@ -24,15 +24,19 @@ namespace BakeryPOS.API.Controllers
 
         // GET: api/products
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<ProductDto>>> GetProducts([FromQuery] int? categoryId)
+        public async Task<ActionResult<IEnumerable<ProductDto>>> GetProducts([FromQuery] int? categoryId, [FromQuery] string? search)
         {
-            // Start with a query that includes the Category for mapping the name
             var query = _context.Products.Include(p => p.Category).Where(p => p.IsActive);
 
-            // Add category filter if provided
             if (categoryId.HasValue)
             {
                 query = query.Where(p => p.CategoryId == categoryId.Value);
+            }
+
+            if (!string.IsNullOrEmpty(search))
+            {
+                search = search.ToLower();
+                query = query.Where(p => p.Name.ToLower().Contains(search) || (p.Barcode != null && p.Barcode.Contains(search)));
             }
 
             var products = await query.OrderBy(p => p.Name).ToListAsync();
@@ -130,31 +134,6 @@ namespace BakeryPOS.API.Controllers
             await _context.SaveChangesAsync();
 
             return NoContent(); // Returns a 204 No Content response
-        }
-
-        // GET: api/products?categoryId=1&search=cake
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<ProductDto>>> GetProducts([FromQuery] int? categoryId, [FromQuery] string? search)
-        {
-            var query = _context.Products.Include(p => p.Category).Where(p => p.IsActive);
-
-            if (categoryId.HasValue)
-            {
-                query = query.Where(p => p.CategoryId == categoryId.Value);
-            }
-
-            // --- NEW SEARCH LOGIC ---
-            if (!string.IsNullOrEmpty(search))
-            {
-                search = search.ToLower();
-                // Search by Name OR Barcode
-                query = query.Where(p => p.Name.ToLower().Contains(search) || (p.Barcode != null && p.Barcode.Contains(search)));
-            }
-
-            var products = await query.OrderBy(p => p.Name).ToListAsync();
-            var productDtos = _mapper.Map<IEnumerable<ProductDto>>(products);
-
-            return Ok(productDtos);
         }
     }
 }
