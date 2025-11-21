@@ -137,5 +137,23 @@ namespace BakeryPOS.API.Controllers
 
             return NoContent(); // Returns a 204 No Content response
         }
+
+        // GET: api/products/barcode/123456
+        [HttpGet("barcode/{barcode}")]
+        public async Task<ActionResult<ProductDto>> GetProductByBarcode(string barcode)
+        {
+            // Find the product by barcode (Case insensitive is usually safer)
+            var product = await _context.Products
+                .Include(p => p.Category) // Important: Include Category so the DTO has CategoryName
+                .FirstOrDefaultAsync(p => p.IsActive && p.Barcode == barcode);
+
+            if (product == null)
+            {
+                return NotFound(new { message = "Product not found" });
+            }
+
+            var productDto = _mapper.Map<ProductDto>(product);
+            return Ok(productDto);
+        }
     }
 }
