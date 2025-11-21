@@ -177,6 +177,12 @@ app.UseAuthentication();
 
 app.UseAuthorization();
 
+var webRoot = app.Environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+var imagesDir = Path.Combine(webRoot, "images");
+if (!Directory.Exists(imagesDir))
+{
+    Directory.CreateDirectory(imagesDir);
+}
 app.UseStaticFiles();
 
 app.MapControllers();
