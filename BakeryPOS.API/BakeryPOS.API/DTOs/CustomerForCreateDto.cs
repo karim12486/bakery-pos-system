@@ -10,5 +10,6 @@ namespace BakeryPOS.API.DTOs
         public string? Address { get; set; }
         [Range(0, 100)]
         public decimal DiscountPercentage { get; set; } = 0;
+        public string? ImageUrl { get; set; }
     }
 }

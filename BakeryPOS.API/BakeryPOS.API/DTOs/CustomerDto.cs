@@ -8,5 +8,6 @@
         public string Address { get; set; }
         public decimal CurrentBalance { get; set; } // Negative means they owe money
         public decimal DiscountPercentage { get; set; }
+        public string? ImageUrl { get; set; }
     }
 }
