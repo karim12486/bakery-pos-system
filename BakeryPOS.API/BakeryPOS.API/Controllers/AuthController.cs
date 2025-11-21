@@ -92,5 +92,19 @@ namespace BakeryPOS.API.Controllers
 
             return Ok(users);
         }
+
+        // GET: api/auth/users
+        // Public endpoint to get just the usernames for the login screen
+        [HttpGet("users")]
+        public async Task<ActionResult<IEnumerable<string>>> GetUsernames()
+        {
+            var usernames = await _context.Users
+                .Where(u => u.IsActive)       // Only active users
+                .OrderBy(u => u.Username)     // Sort alphabetically
+                .Select(u => u.Username)      // Select ONLY the username string
+                .ToListAsync();
+
+            return Ok(usernames);
+        }
     }
 }
