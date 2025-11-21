@@ -1,4 +1,5 @@
 ﻿using AutoMapper;
+using BakeryPOS.API.Core.Attributes;
 using BakeryPOS.API.Core.Entities;
 using BakeryPOS.API.Core.Enums;
 using BakeryPOS.API.Core.Interfaces;
@@ -15,6 +16,7 @@ namespace BakeryPOS.API.Controllers
     [ApiController]
     [Route("api/[controller]")]
     [Authorize] // 1. This is the magic attribute!
+    [HasPermission(UserPermissions.ManageUsers)]
     public class AdminController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -28,6 +30,7 @@ namespace BakeryPOS.API.Controllers
             _mapper = mapper;
         }
 
+        [HasPermission(UserPermissions.ManageUsers)]
         [HttpPost("users")]
         public async Task<IActionResult> CreateUser(UserForCreationDto userForCreationDto)
         {
@@ -59,6 +62,7 @@ namespace BakeryPOS.API.Controllers
 
         // GET: api/admin/users
         // Gets a list of all users.
+        [HasPermission(UserPermissions.ManageUsers)]
         [HttpGet("users")]
         public async Task<ActionResult<IEnumerable<UserDetailDto>>> GetUsers()
         {
@@ -69,6 +73,7 @@ namespace BakeryPOS.API.Controllers
 
         // GET: api/admin/users/5
         // Gets a single user by their ID.
+        [HasPermission(UserPermissions.ManageUsers)]
         [HttpGet("users/{id}")]
         public async Task<ActionResult<UserDetailDto>> GetUser(int id)
         {
@@ -83,6 +88,7 @@ namespace BakeryPOS.API.Controllers
 
         // PUT: api/admin/users/5
         // Updates a user's details.
+        [HasPermission(UserPermissions.ManageUsers)]
         [HttpPut("users/{id}")]
         public async Task<IActionResult> UpdateUser(int id, UserForUpdateDto userForUpdateDto)
         {
@@ -101,6 +107,7 @@ namespace BakeryPOS.API.Controllers
 
         // DELETE: api/admin/users/5
         // Deactivates a user (soft delete).
+        [HasPermission(UserPermissions.ManageUsers)]
         [HttpDelete("users/{id}")]
         public async Task<IActionResult> DeleteUser(int id)
         {
@@ -125,6 +132,7 @@ namespace BakeryPOS.API.Controllers
             return NoContent(); // Standard response for a successful delete
         }
 
+        [HasPermission(UserPermissions.ManageUsers)]
         [HttpPost("users/{id}/reset-password")]
         public async Task<IActionResult> ResetPassword(int id, ResetPasswordDto resetPasswordDto)
         {
@@ -144,6 +152,7 @@ namespace BakeryPOS.API.Controllers
 
         // GET: api/admin/permissions
         // Gets a list of all available permissions for the UI to build the toggles.
+        [HasPermission(UserPermissions.ManageUsers)]
         [HttpGet("permissions")]
         public IActionResult GetPermissions()
         {
@@ -163,12 +172,12 @@ namespace BakeryPOS.API.Controllers
         }
 
         // DANGEROUS - FOR TESTING ONLY
-        [HttpPost("database/reset")]
-        public async Task<IActionResult> ResetDatabase()
-        {
-            await _context.Database.EnsureDeletedAsync();
-            await _context.Database.MigrateAsync();
-            return Ok("Database has been reset to initial state.");
-        }
+        //[HttpPost("database/reset")]
+        //public async Task<IActionResult> ResetDatabase()
+        //{
+        //    await _context.Database.EnsureDeletedAsync();
+        //    await _context.Database.MigrateAsync();
+        //    return Ok("Database has been reset to initial state.");
+        //}
     }
 }

@@ -1,5 +1,7 @@
 ﻿using AutoMapper;
+using BakeryPOS.API.Core.Attributes;
 using BakeryPOS.API.Core.Entities;
+using BakeryPOS.API.Core.Enums;
 using BakeryPOS.API.Data;
 using BakeryPOS.API.DTOs;
 using Microsoft.AspNetCore.Authorization;
@@ -91,6 +93,7 @@ namespace BakeryPOS.API.Controllers
 
         // POST: api/customers
         // Creates a new customer. Restricted to users with the ManageCustomers permission.
+        [HasPermission(UserPermissions.ManageCustomers)]
         [HttpPost]
         public async Task<ActionResult<CustomerDto>> CreateCustomer(CustomerForCreateDto customerForCreateDto)
         {
@@ -106,6 +109,7 @@ namespace BakeryPOS.API.Controllers
 
         // POST: api/customers/{id}/payments
         // Records a new payment made by a customer.
+        [HasPermission(UserPermissions.ManageCustomers)]
         [HttpPost("{id}/payments")]
         public async Task<IActionResult> RecordPayment(int id, CustomerPaymentDto paymentDto)
         {
@@ -145,6 +149,7 @@ namespace BakeryPOS.API.Controllers
 
         // PUT: api/customers/5
         // Updates an existing customer's details.
+        [HasPermission(UserPermissions.ManageCustomers)]
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateCustomer(int id, CustomerForUpdateDto customerForUpdateDto)
         {
@@ -165,6 +170,7 @@ namespace BakeryPOS.API.Controllers
 
         // DELETE: api/customers/5
         // Deletes a customer.
+        [HasPermission(UserPermissions.ManageCustomers)]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteCustomer(int id)
         {

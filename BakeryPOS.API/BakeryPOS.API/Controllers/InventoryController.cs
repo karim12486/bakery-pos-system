@@ -1,4 +1,6 @@
-﻿using BakeryPOS.API.Core.Entities;
+﻿using BakeryPOS.API.Core.Attributes;
+using BakeryPOS.API.Core.Entities;
+using BakeryPOS.API.Core.Enums;
 using BakeryPOS.API.Data;
 using BakeryPOS.API.DTOs;
 using Microsoft.AspNetCore.Authorization;
@@ -21,6 +23,7 @@ namespace BakeryPOS.API.Controllers
         }
 
         // POST: api/inventory/add
+        [HasPermission(UserPermissions.ManageInventory)]
         [HttpPost("add")]
         public async Task<IActionResult> AddStock(StockAdditionDto stockAdditionDto)
         {
@@ -59,6 +62,7 @@ namespace BakeryPOS.API.Controllers
         }
 
         // GET: api/inventory/history/{productId}
+        [HasPermission(UserPermissions.ManageInventory)]
         [HttpGet("history/{productId}")]
         public async Task<ActionResult<IEnumerable<StockMovementDto>>> GetStockHistory(int productId)
         {

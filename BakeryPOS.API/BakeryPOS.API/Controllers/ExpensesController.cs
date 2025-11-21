@@ -1,5 +1,7 @@
 ﻿using AutoMapper;
+using BakeryPOS.API.Core.Attributes;
 using BakeryPOS.API.Core.Entities;
+using BakeryPOS.API.Core.Enums;
 using BakeryPOS.API.Data;
 using BakeryPOS.API.DTOs;
 using Microsoft.AspNetCore.Authorization;
@@ -26,6 +28,7 @@ namespace BakeryPOS.API.Controllers
         // --- Expense Category Endpoints ---
 
         // GET: api/Expenses/categories
+        [HasPermission(UserPermissions.ManageExpenses)]
         [HttpGet("categories")]
         public async Task<ActionResult<IEnumerable<ExpenseCategoryDto>>> GetCategories()
         {
@@ -34,6 +37,7 @@ namespace BakeryPOS.API.Controllers
         }
 
         // POST: api/Expenses/categories
+        [HasPermission(UserPermissions.ManageExpenses)]
         [HttpPost("categories")]
         public async Task<ActionResult<ExpenseCategoryDto>> CreateCategory(ExpenseCategoryForCreateDto categoryDto)
         {
@@ -49,6 +53,7 @@ namespace BakeryPOS.API.Controllers
         // --- Expense Endpoints ---
 
         // GET: api/Expenses
+        [HasPermission(UserPermissions.ManageExpenses)]
         [HttpGet]
         public async Task<ActionResult<IEnumerable<ExpenseDto>>> GetExpenses([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string? search)
         {
@@ -74,6 +79,7 @@ namespace BakeryPOS.API.Controllers
         }
 
         // POST: api/Expenses
+        [HasPermission(UserPermissions.ManageExpenses)]
         [HttpPost]
         public async Task<ActionResult<ExpenseDto>> CreateExpense(ExpenseForCreateDto expenseDto)
         {
@@ -103,6 +109,7 @@ namespace BakeryPOS.API.Controllers
         }
 
         // PUT: api/Expenses/5
+        [HasPermission(UserPermissions.ManageExpenses)]
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateExpense(int id, ExpenseForCreateDto expenseDto)
         {
@@ -121,6 +128,7 @@ namespace BakeryPOS.API.Controllers
         }
 
         // DELETE: api/Expenses/5
+        [HasPermission(UserPermissions.ManageExpenses)]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteExpense(int id)
         {

@@ -1,7 +1,9 @@
 ﻿using AutoMapper; // 1. ADD THIS USING STATEMENT
+using BakeryPOS.API.Core.Attributes;
+using BakeryPOS.API.Core.Entities;
+using BakeryPOS.API.Core.Enums;
 using BakeryPOS.API.Data;
 using BakeryPOS.API.DTOs;
-using BakeryPOS.API.Core.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -64,7 +66,7 @@ namespace BakeryPOS.API.Controllers
 
         // POST: api/products
         [HttpPost]
-        [Authorize]
+        [HasPermission(UserPermissions.ManageProducts)]
         public async Task<ActionResult<ProductDto>> CreateProduct(ProductForCreateDto productForCreateDto)
         {
             var categoryExists = await _context.Categories.AnyAsync(c => c.Id == productForCreateDto.CategoryId);
@@ -89,7 +91,7 @@ namespace BakeryPOS.API.Controllers
 
         // PUT: api/products/5
         [HttpPut("{id}")]
-        [Authorize]
+        [HasPermission(UserPermissions.ManageProducts)]
         public async Task<IActionResult> UpdateProduct(int id, ProductForUpdateDto productForUpdateDto)
         {
             var productFromDb = await _context.Products.FindAsync(id);
@@ -116,7 +118,7 @@ namespace BakeryPOS.API.Controllers
         // DELETE: api/products/5
         // "Deletes" a product. This endpoint is protected.
         [HttpDelete("{id}")]
-        [Authorize] // Only authenticated users can delete products
+        [HasPermission(UserPermissions.ManageProducts)] // Only authenticated users can delete products
         public async Task<IActionResult> DeleteProduct(int id)
         {
             var productFromDb = await _context.Products.FindAsync(id);

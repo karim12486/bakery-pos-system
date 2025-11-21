@@ -1,5 +1,7 @@
 ﻿using AutoMapper;
+using BakeryPOS.API.Core.Attributes;
 using BakeryPOS.API.Core.Entities;
+using BakeryPOS.API.Core.Enums;
 using BakeryPOS.API.Data;
 using BakeryPOS.API.DTOs;
 using Microsoft.AspNetCore.Authorization;
@@ -33,7 +35,7 @@ namespace BakeryPOS.API.Controllers
         // POST: api/categories
         // Admin-only endpoint to create a new category
         [HttpPost]
-        [Authorize] // Simple authorization for now, can be restricted to admin later
+        [HasPermission(UserPermissions.ManageProducts)] // Simple authorization for now, can be restricted to admin later
         public async Task<ActionResult<CategoryDto>> CreateCategory(CategoryForCreateDto categoryDto)
         {
             if (await _context.Categories.AnyAsync(c => c.Name.ToLower() == categoryDto.Name.ToLower()))
@@ -50,7 +52,7 @@ namespace BakeryPOS.API.Controllers
 
         // PUT: api/categories/{id}
         [HttpPut("{id}")]
-        [Authorize]
+        [HasPermission(UserPermissions.ManageProducts)]
         public async Task<IActionResult> UpdateCategory(int id, CategoryForCreateDto dto)
         {
             var category = await _context.Categories.FindAsync(id);
@@ -62,7 +64,7 @@ namespace BakeryPOS.API.Controllers
 
         // DELETE: api/categories/{id}
         [HttpDelete("{id}")]
-        [Authorize]
+        [HasPermission(UserPermissions.ManageProducts)]
         public async Task<IActionResult> DeleteCategory(int id)
         {
             var category = await _context.Categories.FindAsync(id);

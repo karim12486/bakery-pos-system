@@ -1,4 +1,6 @@
-﻿using BakeryPOS.API.Data;
+﻿using BakeryPOS.API.Core.Attributes;
+using BakeryPOS.API.Core.Enums;
+using BakeryPOS.API.Data;
 using BakeryPOS.API.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,14 +22,17 @@ namespace BakeryPOS.API.Controllers
 
         // GET: api/dashboard/summary
         // Returns the data for the 4 main cards at the top of the dashboard
+        [HasPermission(UserPermissions.AccessReports)]
         [HttpGet("summary")]
         public async Task<ActionResult<DashboardSummaryDto>> GetSummary()
         {
             var today = DateTime.UtcNow.Date;
             var yesterday = today.AddDays(-1);
 
-            // Calculate start of this week (assuming Sunday start)
-            var startOfThisWeek = today.AddDays(-(int)today.DayOfWeek);
+            // Calculate start of this week (assuming Monday start)
+            int daysSinceMonday = ((int)today.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+
+            var startOfThisWeek = today.AddDays(-daysSinceMonday);
             var startOfLastWeek = startOfThisWeek.AddDays(-7);
 
             // --- 1. Sales & Transactions (Today vs Yesterday) ---
@@ -62,24 +67,34 @@ namespace BakeryPOS.API.Controllers
                 .Where(s => s.SaleDate >= startOfLastWeek && s.SaleDate < startOfThisWeek)
                 .SumAsync(s => s.DiscountAmount);
 
+            // --- 4. Total Clients & Discount Transactions ---
+            // Count all customers in the database
+            var totalClients = await _context.Customers.CountAsync();
+
+            // Count all sales where a discount was applied (DiscountAmount > 0)
+            var totalDiscountTransactions = await _context.Sales.CountAsync(s => s.DiscountAmount > 0);
+
+
             // --- Build DTO ---
             var summary = new DashboardSummaryDto
             {
                 // Sales
                 TodaysSales = todaysTotal,
                 SalesChangePercentage = CalculatePercentageChange(todaysTotal, yesterdaysTotal),
-
-                // Transactions
                 TodaysTransactions = todaysCount,
-                TransactionsChangePercentage = CalculatePercentageChange(todaysCount, yesterdaysCount),
 
                 // Clients
+                TotalClients = totalClients,
                 NewClientsThisWeek = newClientsThisWeek,
                 ClientsChangePercentage = CalculatePercentageChange(newClientsThisWeek, newClientsLastWeek),
 
                 // Discounts
                 DiscountsThisWeek = discountsThisWeek,
+                TotalDiscountTransactions = totalDiscountTransactions,
                 DiscountsChangePercentage = CalculatePercentageChange(discountsThisWeek, discountsLastWeek)
+
+                
+                
             };
 
             return Ok(summary);
@@ -95,6 +110,7 @@ namespace BakeryPOS.API.Controllers
 
         // GET: api/dashboard/notifications
         // Returns alerts for low stock and pending payments
+        [HasPermission(UserPermissions.AccessReports)]
         [HttpGet("notifications")]
         public async Task<IActionResult> GetNotifications()
         {
@@ -139,6 +155,7 @@ namespace BakeryPOS.API.Controllers
 
 
         // GET: api/dashboard/topselling
+        [HasPermission(UserPermissions.AccessReports)]
         [HttpGet("topselling")]
         public async Task<ActionResult<IEnumerable<TopSellingProductDto>>> GetTopSellingProducts([FromQuery] int count = 5)
         {
@@ -162,6 +179,7 @@ namespace BakeryPOS.API.Controllers
 
 
         // GET: api/dashboard/salesovertime?period=week
+        [HasPermission(UserPermissions.AccessReports)]
         [HttpGet("salesovertime")]
         public async Task<ActionResult<IEnumerable<SalesDataPointDto>>> GetSalesOverTime([FromQuery] string period = "week")
         {
@@ -237,6 +255,7 @@ namespace BakeryPOS.API.Controllers
         }
 
         // GET: api/dashboard/cashierperformance
+        [HasPermission(UserPermissions.AccessReports)]
         [HttpGet("cashierperformance")]
         public async Task<ActionResult<IEnumerable<CashierPerformanceDto>>> GetCashierPerformance([FromQuery] string period = "today")
         {
@@ -262,6 +281,7 @@ namespace BakeryPOS.API.Controllers
         }
 
         // GET: api/dashboard/topclients
+        [HasPermission(UserPermissions.AccessReports)]
         [HttpGet("topclients")]
         public async Task<ActionResult<IEnumerable<TopClientDto>>> GetTopClients([FromQuery] int count = 5)
         {

@@ -4,34 +4,45 @@
     public enum UserPermissions
     {
         None = 0,
-        AllowReturns = 1 << 0,                  // 1 (Retour)
-        ApplyDiscounts = 1 << 1,                // 2 (Remise)
-        ModifyPrice = 1 << 2,                   // 4 (ModifPrix)
-        ModifyQuantity = 1 << 3,                // 8 (ModifQte)
-        ApplyHalfPrice = 1 << 4,                // 16 (PrixDemi)
-        UseMiscellaneous = 1 << 5,              // 32 (Divers)
-        PrintDuplicateReceipt = 1 << 6,         // 64 (Duplicata)
-        UseFlashSale = 1 << 7,                  // 128 (Flash - Quick sale item)
-        OpenCashDrawer = 1 << 8,                // 256 (Tiroir)
-        CancelSale = 1 << 9,                    // 512 (Annulation)
-        ViewReports = 1 << 10,                  // 1024 (Rapport)
-        ManageExpenses = 1 << 11,               // 2048 (Depenses)
-        ManageStockIn = 1 << 12,                // 4096 (Receptions)
-        ManageStockOut = 1 << 13,               // 8192 (Sorties)
-        ManageCustomers = 1 << 14,              // 16384 (Clients)
-        ProcessCustomerPayments = 1 << 15,      // 32768 (ClientsRegle)
-        ManageProducts = 1 << 16,               // 65536 (Articles)
-        AddToBill = 1 << 17,                    // 131072 (Addition)
-        FinalizeSale = 1 << 18,                 // 262144 (Solder)
-        PerformDirectSale = 1 << 19,            // 524288 (Directe)
-        PerformEndOfDayClosure = 1 << 20,       // 1048576 (Cloture)
 
-        // --- Example Role Combinations ---
+        // 1. The POS Screen (SalesController)
+        // Allows opening the register, scanning items, and taking money.
+        ProcessSales = 1 << 0,
 
-        // A user with ALL permissions
+        // 2. Security Action (RemovalController / SignalR)
+        // Allows the user to approve item deletions on the cashier screen.
+        ApproveRemovals = 1 << 1,
+
+        // 3. Product Catalog (ProductsController & CategoriesController)
+        // Full access to Create, Edit, Delete Products and Categories.
+        ManageProducts = 1 << 2,
+
+        // 4. Stock Management (InventoryController)
+        // Access to add stock and view stock history.
+        ManageInventory = 1 << 3,
+
+        // 5. Client Management (CustomersController)
+        // Create/Edit Customers and record credit payments.
+        ManageCustomers = 1 << 4,
+
+        // 6. Expense Tracking (ExpensesController)
+        // Record and categorize operational costs.
+        ManageExpenses = 1 << 5,
+
+        // 7. Staff Management (AdminController)
+        // Create users, reset passwords, change permissions.
+        ManageUsers = 1 << 6,
+
+        // 8. Analytics (DashboardController & ReportsController)
+        // View the dashboard stats, charts, and download PDF reports.
+        AccessReports = 1 << 7,
+
+        // --- Roles ---
+
+        // Admin has access to EVERYTHING
         Admin = ~None,
 
-        // A standard cashier role
-        Cashier = ApplyDiscounts | OpenCashDrawer | CancelSale | AddToBill | FinalizeSale | ManageCustomers
+        // Standard Cashier: Can sell items and manage customers (for credit), but nothing else.
+        Cashier = ProcessSales | ManageCustomers
     }
 }

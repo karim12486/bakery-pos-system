@@ -1,4 +1,5 @@
 ﻿using AutoMapper;
+using BakeryPOS.API.Core.Attributes;
 using BakeryPOS.API.Core.Entities;
 using BakeryPOS.API.Core.Enums;
 using BakeryPOS.API.Data;
@@ -25,6 +26,7 @@ namespace BakeryPOS.API.Controllers
             _mapper = mapper;
         }
 
+        [HasPermission(UserPermissions.ProcessSales)]
         [HttpPost]
         public async Task<IActionResult> CreateSale(SaleForCreateDto saleForCreateDto)
         {
