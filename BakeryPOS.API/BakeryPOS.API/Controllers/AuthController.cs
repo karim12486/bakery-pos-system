@@ -75,25 +75,6 @@ namespace BakeryPOS.API.Controllers
         }
 
         // GET: api/auth/users
-        // Public endpoint to get users for the login screen dropdown
-        [HttpGet("users")]
-        public async Task<ActionResult<IEnumerable<UserLoginPreviewDto>>> GetUsersForLogin()
-        {
-            var users = await _context.Users
-                .Where(u => u.IsActive) // Only show active users
-                .OrderBy(u => u.FullName) // Sort alphabetically
-                .Select(u => new UserLoginPreviewDto
-                {
-                    Username = u.Username,
-                    FullName = u.FullName,
-                    ImageUrl = u.ImageUrl
-                })
-                .ToListAsync();
-
-            return Ok(users);
-        }
-
-        // GET: api/auth/users
         // Public endpoint to get just the usernames for the login screen
         [HttpGet("users")]
         public async Task<ActionResult<IEnumerable<string>>> GetUsernames()
