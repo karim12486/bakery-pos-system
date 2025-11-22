@@ -58,16 +58,16 @@ namespace BakeryPOS.API.Controllers
             return Ok(new PagedResponse<UserDetailDto>(usersToReturn, pagination.PageNumber, pagination.PageSize, totalRecords));
         }
 
-        // GET: api/admin/users
-        // Gets a list of all users.
-        [HasPermission(UserPermissions.ManageUsers)]
-        [HttpGet("users")]
-        public async Task<ActionResult<IEnumerable<UserDetailDto>>> GetUsers()
-        {
-            var users = await _context.Users.OrderBy(u => u.Username).ToListAsync();
-            var usersToReturn = _mapper.Map<IEnumerable<UserDetailDto>>(users);
-            return Ok(usersToReturn);
-        }
+        //// GET: api/admin/users
+        //// Gets a list of all users.
+        //[HasPermission(UserPermissions.ManageUsers)]
+        //[HttpGet("users")]
+        //public async Task<ActionResult<IEnumerable<UserDetailDto>>> GetUsers()
+        //{
+        //    var users = await _context.Users.OrderBy(u => u.Username).ToListAsync();
+        //    var usersToReturn = _mapper.Map<IEnumerable<UserDetailDto>>(users);
+        //    return Ok(usersToReturn);
+        //}
 
         // GET: api/admin/users/5
         // Gets a single user by their ID.
