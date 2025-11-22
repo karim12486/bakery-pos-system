@@ -4,6 +4,7 @@ using BakeryPOS.API.Core.Entities;
 using BakeryPOS.API.Core.Enums;
 using BakeryPOS.API.Data;
 using BakeryPOS.API.DTOs;
+using BakeryPOS.API.DTOs.Shared;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -55,27 +56,35 @@ namespace BakeryPOS.API.Controllers
         // GET: api/Expenses
         [HasPermission(UserPermissions.ManageExpenses)]
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<ExpenseDto>>> GetExpenses([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string? search)
+        public async Task<ActionResult<PagedResponse<ExpenseDto>>> GetExpenses(
+            [FromQuery] DateTime? startDate,
+            [FromQuery] DateTime? endDate,
+            [FromQuery] string? search,
+            [FromQuery] PaginationParams pagination)
         {
             var query = _context.Expenses.AsQueryable();
 
             if (startDate.HasValue) query = query.Where(e => e.Date >= startDate.Value.Date);
             if (endDate.HasValue) query = query.Where(e => e.Date < endDate.Value.Date.AddDays(1));
 
-            // --- NEW SEARCH LOGIC ---
             if (!string.IsNullOrEmpty(search))
             {
                 search = search.ToLower();
                 query = query.Where(e => e.Description.ToLower().Contains(search));
             }
 
+            var totalRecords = await query.CountAsync();
+
             var expenses = await query
                 .Include(e => e.Category)
                 .Include(e => e.User)
-                .OrderByDescending(e => e.Date)
+                .OrderByDescending(e => e.Date) // Newest first
+                .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+                .Take(pagination.PageSize)
                 .ToListAsync();
 
-            return Ok(_mapper.Map<IEnumerable<ExpenseDto>>(expenses));
+            var dtos = _mapper.Map<IEnumerable<ExpenseDto>>(expenses);
+            return Ok(new PagedResponse<ExpenseDto>(dtos, pagination.PageNumber, pagination.PageSize, totalRecords));
         }
 
         // POST: api/Expenses

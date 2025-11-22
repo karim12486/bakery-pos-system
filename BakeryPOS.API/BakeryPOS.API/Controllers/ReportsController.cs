@@ -1,11 +1,12 @@
 ﻿using BakeryPOS.API.Core.Interfaces;
+using BakeryPOS.API.Core.Interfaces;
 using BakeryPOS.API.Data;
 using BakeryPOS.API.DTOs;
+using BakeryPOS.API.DTOs.Shared;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
-using BakeryPOS.API.Core.Interfaces;
 
 namespace BakeryPOS.API.Controllers
 {
@@ -30,10 +31,18 @@ namespace BakeryPOS.API.Controllers
         // GET: api/reports
         // Gets a list of all previously generated reports.
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<ReportListDto>>> GetReports()
+        public async Task<ActionResult<PagedResponse<ReportListDto>>> GetReports([FromQuery] PaginationParams pagination)
         {
-            var reports = await _context.Reports
-                .OrderByDescending(r => r.GeneratedAt)
+            var query = _context.Reports.AsQueryable();
+
+            // 1. Get Total Count
+            var totalRecords = await query.CountAsync();
+
+            // 2. Apply Sorting and Paging
+            var reports = await query
+                .OrderByDescending(r => r.GeneratedAt) // Newest reports first
+                .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+                .Take(pagination.PageSize)
                 .Select(r => new ReportListDto
                 {
                     Id = r.Id,
@@ -42,27 +51,18 @@ namespace BakeryPOS.API.Controllers
                 })
                 .ToListAsync();
 
-            return Ok(reports);
+            // 3. Return Paged Response
+            return Ok(new PagedResponse<ReportListDto>(reports, pagination.PageNumber, pagination.PageSize, totalRecords));
         }
 
         // GET: api/reports/5
-        // Gets the full data for a single report by its ID.
         [HttpGet("{id}")]
         public async Task<IActionResult> GetReport(int id)
         {
             var report = await _context.Reports.FindAsync(id);
-
-            if (report == null)
-            {
-                return NotFound();
-            }
-
-            // Since the data is stored as a JSON string, we return it as a raw JSON object.
-            // This is very flexible for the frontend.
-            //var reportData = JsonSerializer.Deserialize<object>(report.ReportDataJson);
-
-            //return Ok(reportData);
-            return Ok($"Cela finira par télécharger le fichier à l'adresse: {report.PdfFilePath}");
+            if (report == null) return NotFound();
+            // Return a placeholder message or the path, as the JSON data is no longer stored
+            return Ok(new { message = "Report file exists.", path = report.PdfFilePath });
         }
 
 
@@ -83,31 +83,20 @@ namespace BakeryPOS.API.Controllers
         }
 
         // GET: api/reports/{id}/download
-        // Downloads the PDF file for a specific report.
         [HttpGet("{id}/download")]
         public async Task<IActionResult> DownloadReport(int id)
         {
-            // 1. Find the report record in the database
             var report = await _context.Reports.FindAsync(id);
-            if (report == null)
-            {
-                return NotFound("Rapport introuvable.");
-            }
+            if (report == null) return NotFound("Report not found.");
 
-            // 2. Check if the file actually exists on the server
             if (string.IsNullOrEmpty(report.PdfFilePath) || !System.IO.File.Exists(report.PdfFilePath))
             {
-                return NotFound("Le fichier PDF du rapport est introuvable sur le serveur.");
+                return NotFound("The report PDF file could not be found on the server.");
             }
 
-            // 3. Read the file into a byte array
             var pdfBytes = await System.IO.File.ReadAllBytesAsync(report.PdfFilePath);
-
-            // 4. Determine the file name from the path
             var fileName = Path.GetFileName(report.PdfFilePath);
 
-            // 5. Return the file as a downloadable attachment
-            // The "application/pdf" MIME type tells the browser how to handle the file.
             return File(pdfBytes, "application/pdf", fileName);
         }
     }

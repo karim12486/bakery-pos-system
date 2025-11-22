@@ -4,6 +4,7 @@ using BakeryPOS.API.Core.Entities;
 using BakeryPOS.API.Core.Enums;
 using BakeryPOS.API.Data;
 using BakeryPOS.API.DTOs;
+using BakeryPOS.API.DTOs.Shared;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -29,14 +30,69 @@ namespace BakeryPOS.API.Controllers
         // GET: api/customers
         // Gets a list of all customers. Accessible to all logged-in users.
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<CustomerDto>>> GetCustomers()
+        public async Task<ActionResult<PagedResponse<CustomerDto>>> GetCustomers(
+            [FromQuery] PaginationParams pagination,
+            [FromQuery] string? search)
         {
-            var customers = await _context.Customers
+            // Start query without the IsActive check
+            var query = _context.Customers.AsQueryable();
+
+            if (!string.IsNullOrEmpty(search))
+            {
+                search = search.ToLower();
+                query = query.Where(c => c.Name.ToLower().Contains(search) || (c.PhoneNumber != null && c.PhoneNumber.Contains(search)));
+            }
+
+            var totalRecords = await query.CountAsync();
+
+            var customers = await query
                 .OrderBy(c => c.Name)
+                .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+                .Take(pagination.PageSize)
                 .ToListAsync();
 
             var customerDtos = _mapper.Map<IEnumerable<CustomerDto>>(customers);
-            return Ok(customerDtos);
+
+            return Ok(new PagedResponse<CustomerDto>(customerDtos, pagination.PageNumber, pagination.PageSize, totalRecords));
+        }
+
+        // GET: api/customers/{id}/transactions
+        // Dedicated endpoint for paginated transaction history
+        [HttpGet("{id}/transactions")]
+        public async Task<ActionResult<PagedResponse<CustomerTransactionDto>>> GetCustomerTransactions(
+            int id,
+            [FromQuery] PaginationParams pagination)
+        {
+            // Ensure customer exists
+            var customerExists = await _context.Customers.AnyAsync(c => c.Id == id);
+            if (!customerExists) return NotFound("Customer not found.");
+
+            var query = _context.Sales
+                .Include(s => s.SaleDetails).ThenInclude(sd => sd.Product)
+                .Where(s => s.CustomerId == id);
+
+            var totalRecords = await query.CountAsync();
+
+            var sales = await query
+                .OrderByDescending(s => s.SaleDate)
+                .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+                .Take(pagination.PageSize)
+                .ToListAsync();
+
+            // Map manually to the Transaction DTO (same logic as before)
+            var transactionDtos = sales.Select(s => new CustomerTransactionDto
+            {
+                SaleId = s.Id,
+                Date = s.SaleDate,
+                Total = s.FinalAmount,
+                Discount = s.DiscountAmount,
+                Paid = s.AmountPaid,
+                Change = s.AmountPaid > s.FinalAmount ? s.AmountPaid - s.FinalAmount : 0,
+                PaymentType = s.PaymentMethod.ToString(),
+                ItemsSummary = string.Join(", ", s.SaleDetails.Select(sd => $"{sd.Quantity}x {sd.Product.Name}"))
+            }).ToList();
+
+            return Ok(new PagedResponse<CustomerTransactionDto>(transactionDtos, pagination.PageNumber, pagination.PageSize, totalRecords));
         }
 
         // GET: api/customers/5

@@ -334,8 +334,18 @@ namespace BakeryPOS.API.Controllers
                 {
                     UserId = group.Key.UserId,
                     CashierName = group.Key.FullName,
+
+                    // Count transactions
                     TotalTransactions = group.Count(),
-                    TotalSalesValue = group.Sum(s => s.FinalAmount)
+
+                    // Sum total money
+                    TotalSalesValue = group.Sum(s => s.FinalAmount),
+
+                    // --- ADD THIS CALCULATION ---
+                    // We use a ternary operator to prevent "Divide by Zero" errors
+                    AverageSaleValue = group.Count() > 0
+                        ? group.Sum(s => s.FinalAmount) / group.Count()
+                        : 0
                 })
                 .OrderByDescending(p => p.TotalSalesValue)
                 .ToListAsync();

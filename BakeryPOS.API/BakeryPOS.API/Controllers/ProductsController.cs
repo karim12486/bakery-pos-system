@@ -4,6 +4,7 @@ using BakeryPOS.API.Core.Entities;
 using BakeryPOS.API.Core.Enums;
 using BakeryPOS.API.Data;
 using BakeryPOS.API.DTOs;
+using BakeryPOS.API.DTOs.Shared;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -26,14 +27,15 @@ namespace BakeryPOS.API.Controllers
 
         // GET: api/products
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<ProductDto>>> GetProducts([FromQuery] int? categoryId, [FromQuery] string? search)
+        public async Task<ActionResult<PagedResponse<ProductDto>>> GetProducts(
+            [FromQuery] int? categoryId,
+            [FromQuery] string? search,
+            [FromQuery] PaginationParams pagination) // <-- Add this
         {
             var query = _context.Products.Include(p => p.Category).Where(p => p.IsActive);
 
             if (categoryId.HasValue)
-            {
                 query = query.Where(p => p.CategoryId == categoryId.Value);
-            }
 
             if (!string.IsNullOrEmpty(search))
             {
@@ -41,10 +43,20 @@ namespace BakeryPOS.API.Controllers
                 query = query.Where(p => p.Name.ToLower().Contains(search) || (p.Barcode != null && p.Barcode.Contains(search)));
             }
 
-            var products = await query.OrderBy(p => p.Name).ToListAsync();
+            // 1. Get Total Count BEFORE paging
+            var totalRecords = await query.CountAsync();
+
+            // 2. Apply Paging
+            var products = await query
+                .OrderBy(p => p.Name)
+                .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+                .Take(pagination.PageSize)
+                .ToListAsync();
+
             var productDtos = _mapper.Map<IEnumerable<ProductDto>>(products);
 
-            return Ok(productDtos);
+            // 3. Return Paged Response
+            return Ok(new PagedResponse<ProductDto>(productDtos, pagination.PageNumber, pagination.PageSize, totalRecords));
         }
 
         // GET: api/products/5

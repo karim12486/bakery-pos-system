@@ -5,6 +5,7 @@ using BakeryPOS.API.Core.Enums;
 using BakeryPOS.API.Core.Interfaces;
 using BakeryPOS.API.Data;
 using BakeryPOS.API.DTOs;
+using BakeryPOS.API.DTOs.Shared;
 using BakeryPOS.API.Mappers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -31,33 +32,30 @@ namespace BakeryPOS.API.Controllers
         }
 
         [HasPermission(UserPermissions.ManageUsers)]
-        [HttpPost("users")]
-        public async Task<IActionResult> CreateUser(UserForCreationDto userForCreationDto)
+        [HttpGet("users")]
+        public async Task<ActionResult<PagedResponse<UserDetailDto>>> GetUsers(
+            [FromQuery] string? search,
+            [FromQuery] PaginationParams pagination)
         {
-            // 2. Check if username already exists to prevent duplicates
-            var usernameLower = userForCreationDto.Username.ToLower();
-            if (await _context.Users.AnyAsync(u => u.Username.ToLower() == usernameLower))
+            var query = _context.Users.AsQueryable();
+
+            if (!string.IsNullOrEmpty(search))
             {
-                return BadRequest("Ce nom d'utilisateur est déjà pris.");
+                search = search.ToLower();
+                query = query.Where(u => u.FullName.ToLower().Contains(search) || u.Username.ToLower().Contains(search));
             }
 
-            // 3. Create the new user entity
-            var newUser = new User
-            {
-                Username = userForCreationDto.Username,
-                FullName = userForCreationDto.FullName,
-                PasswordHash = _passwordService.HashPassword(userForCreationDto.Password),
-                Permissions = userForCreationDto.Permissions,
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            };
+            var totalRecords = await query.CountAsync();
 
-            // 4. Add the user to the database and save
-            await _context.Users.AddAsync(newUser);
-            await _context.SaveChangesAsync();
+            var users = await query
+                .OrderBy(u => u.FullName)
+                .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+                .Take(pagination.PageSize)
+                .ToListAsync();
 
-            // 5. Return a success response
-            return StatusCode(201, "Utilisateur créé avec succès.");
+            var usersToReturn = _mapper.Map<IEnumerable<UserDetailDto>>(users);
+
+            return Ok(new PagedResponse<UserDetailDto>(usersToReturn, pagination.PageNumber, pagination.PageSize, totalRecords));
         }
 
         // GET: api/admin/users
