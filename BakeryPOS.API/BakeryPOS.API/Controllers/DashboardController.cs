@@ -207,79 +207,114 @@ namespace BakeryPOS.API.Controllers
 
 
         // GET: api/dashboard/salesovertime?period=week
-        [HasPermission(UserPermissions.AccessReports)]
         [HttpGet("salesovertime")]
         public async Task<ActionResult<IEnumerable<SalesDataPointDto>>> GetSalesOverTime([FromQuery] string period = "week")
         {
-            List<SalesDataPointDto> salesData;
+            List<SalesDataPointDto> finalResult = new List<SalesDataPointDto>();
             var today = DateTime.UtcNow.Date;
 
-            switch (period.ToLower())
+            // We use InvariantCulture or En-US to ensure "Jan", "Feb", "Sun", "Mon" format 
+            // regardless of server settings, as requested.
+            var culture = new System.Globalization.CultureInfo("en-US");
+
+            if (period.ToLower() == "year")
             {
-                case "year":
-                    var yearlyData = await _context.Sales
-                        .Where(s => s.SaleDate >= today.AddYears(-1))
-                        .GroupBy(s => new { s.SaleDate.Year, s.SaleDate.Month })
-                        .Select(group => new
-                        {
-                            Year = group.Key.Year,
-                            Month = group.Key.Month,
-                            TotalSales = group.Sum(s => s.FinalAmount)
-                        })
-                        .ToListAsync();
+                // --- YEAR VIEW: Current Year (Jan - Dec) ---
+                var startOfYear = new DateTime(today.Year, 1, 1);
+                var endOfYear = startOfYear.AddYears(1);
 
-                    salesData = yearlyData.Select(s => new SalesDataPointDto
+                // 1. Get raw data for the current year
+                var dbData = await _context.Sales
+                    .Where(s => s.SaleDate >= startOfYear && s.SaleDate < endOfYear)
+                    .GroupBy(s => s.SaleDate.Month)
+                    .Select(g => new { Month = g.Key, Total = g.Sum(s => s.FinalAmount) })
+                    .ToListAsync();
+
+                // 2. Loop 1-12 to ensure every month is represented
+                for (int m = 1; m <= 12; m++)
+                {
+                    var monthName = new DateTime(today.Year, m, 1).ToString("MMM", culture); // "Jan", "Feb"
+                    var salesForMonth = dbData.FirstOrDefault(d => d.Month == m)?.Total ?? 0;
+
+                    finalResult.Add(new SalesDataPointDto
                     {
-                        Label = new DateTime(s.Year, s.Month, 1).ToString("MMM yyyy"),
-                        TotalSales = s.TotalSales
-                    })
-                    .OrderBy(s => DateTime.Parse(s.Label))
-                    .ToList();
-                    break;
+                        Label = monthName,
+                        TotalSales = salesForMonth
+                    });
+                }
+            }
+            else if (period.ToLower() == "month")
+            {
+                // --- MONTH VIEW: Current Month (Week 1 - Week 5) ---
+                var startOfMonth = new DateTime(today.Year, today.Month, 1);
+                var endOfMonth = startOfMonth.AddMonths(1);
 
-                case "month":
-                    var monthlyData = await _context.Sales
-                        .Where(s => s.SaleDate >= today.AddDays(-30))
-                        .GroupBy(s => s.SaleDate.Date)
-                        .Select(group => new
-                        {
-                            Date = group.Key,
-                            TotalSales = group.Sum(s => s.FinalAmount)
-                        })
-                        .ToListAsync();
+                // 1. Get all sales for this month
+                var dbData = await _context.Sales
+                    .Where(s => s.SaleDate >= startOfMonth && s.SaleDate < endOfMonth)
+                    .Select(s => new { s.SaleDate.Day, s.FinalAmount })
+                    .ToListAsync();
 
-                    salesData = monthlyData.Select(s => new SalesDataPointDto
+                // 2. Create "Weeks" logic manually
+                // Week 1: Days 1-7, Week 2: 8-14, etc.
+                int daysInMonth = DateTime.DaysInMonth(today.Year, today.Month);
+
+                // We assume a max of 5 weeks cover any month
+                for (int w = 0; w < 5; w++)
+                {
+                    int startDay = (w * 7) + 1;
+                    int endDay = startDay + 6;
+
+                    // Stop if the start of this "week" is beyond the end of the month
+                    if (startDay > daysInMonth) break;
+
+                    // Cap the end day to the last day of the month
+                    if (endDay > daysInMonth) endDay = daysInMonth;
+
+                    // Sum sales that fall within this day range
+                    var weeklySales = dbData
+                        .Where(d => d.Day >= startDay && d.Day <= endDay)
+                        .Sum(d => d.FinalAmount);
+
+                    finalResult.Add(new SalesDataPointDto
                     {
-                        Label = s.Date.ToString("yyyy-MM-dd"),
-                        TotalSales = s.TotalSales
-                    })
-                    .OrderBy(s => s.Label)
-                    .ToList();
-                    break;
+                        Label = $"Week {w + 1}", // "Week 1", "Week 2"
+                        TotalSales = weeklySales
+                    });
+                }
+            }
+            else
+            {
+                // --- WEEK VIEW (Default): Past 7 Days (e.g., Tue -> Mon) ---
+                // Start from 6 days ago up to today (7 days total)
 
-                case "week":
-                default:
-                    var weeklyData = await _context.Sales
-                        .Where(s => s.SaleDate >= today.AddDays(-7))
-                        .GroupBy(s => s.SaleDate.Date)
-                        .Select(group => new
-                        {
-                            Date = group.Key,
-                            TotalSales = group.Sum(s => s.FinalAmount)
-                        })
-                        .ToListAsync();
+                // 1. Get raw data for the date range
+                var startOfRange = today.AddDays(-6);
+                var endOfRange = today.AddDays(1); // Up to tomorrow midnight
 
-                    salesData = weeklyData.Select(s => new SalesDataPointDto
+                var dbData = await _context.Sales
+                    .Where(s => s.SaleDate >= startOfRange && s.SaleDate < endOfRange)
+                    .GroupBy(s => s.SaleDate.Date)
+                    .Select(g => new { Date = g.Key, Total = g.Sum(s => s.FinalAmount) })
+                    .ToListAsync();
+
+                // 2. Loop from 6 days ago to Today
+                for (int i = 6; i >= 0; i--)
+                {
+                    var targetDate = today.AddDays(-i);
+                    var dayName = targetDate.ToString("ddd", culture); // "Sun", "Mon"
+
+                    var salesForDay = dbData.FirstOrDefault(d => d.Date == targetDate)?.Total ?? 0;
+
+                    finalResult.Add(new SalesDataPointDto
                     {
-                        Label = s.Date.DayOfWeek.ToString(),
-                        TotalSales = s.TotalSales
-                    })
-                    .OrderBy(s => s.Label) // Note: Sorting day names alphabetically isn't ideal, better to sort by Date in frontend
-                    .ToList();
-                    break;
+                        Label = dayName,
+                        TotalSales = salesForDay
+                    });
+                }
             }
 
-            return Ok(salesData);
+            return Ok(finalResult);
         }
 
         // GET: api/dashboard/cashierperformance
