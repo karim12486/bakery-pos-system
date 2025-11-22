@@ -58,16 +58,35 @@ namespace BakeryPOS.API.Controllers
             return Ok(new PagedResponse<UserDetailDto>(usersToReturn, pagination.PageNumber, pagination.PageSize, totalRecords));
         }
 
-        //// GET: api/admin/users
-        //// Gets a list of all users.
-        //[HasPermission(UserPermissions.ManageUsers)]
-        //[HttpGet("users")]
-        //public async Task<ActionResult<IEnumerable<UserDetailDto>>> GetUsers()
-        //{
-        //    var users = await _context.Users.OrderBy(u => u.Username).ToListAsync();
-        //    var usersToReturn = _mapper.Map<IEnumerable<UserDetailDto>>(users);
-        //    return Ok(usersToReturn);
-        //}
+        // POST: api/admin/users
+        // Creates a new user (Admin or Cashier)
+        [HttpPost("users")]
+        public async Task<IActionResult> CreateUser(UserForCreationDto userForCreationDto)
+        {
+            // 1. Check if username already exists (Case insensitive)
+            if (await _context.Users.AnyAsync(u => u.Username.ToLower() == userForCreationDto.Username.ToLower()))
+            {
+                return BadRequest("Ce nom d'utilisateur est déjà pris."); // "Username is already taken"
+            }
+
+            // 2. Map DTO to Entity
+            // (Ensure you have CreateMap<UserForCreationDto, User>() in AutoMapperProfiles)
+            var newUser = _mapper.Map<Core.Entities.User>(userForCreationDto);
+
+            // 3. Hash the password
+            newUser.PasswordHash = _passwordService.HashPassword(userForCreationDto.Password);
+
+            // 4. Set default fields
+            newUser.IsActive = true;
+            newUser.CreatedAt = DateTime.UtcNow;
+
+            // 5. Save to Database
+            await _context.Users.AddAsync(newUser);
+            await _context.SaveChangesAsync();
+
+            // 6. Return success message
+            return StatusCode(201, "Utilisateur créé avec succès."); // "User created successfully"
+        }
 
         // GET: api/admin/users/5
         // Gets a single user by their ID.
