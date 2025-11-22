@@ -32,7 +32,7 @@ namespace BakeryPOS.API.Services
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(claims),
-                Expires = DateTime.Now.AddDays(7), // Token is valid for 7 days
+                Expires = DateTime.Now.AddHours(12), // Token is valid for 12 hours
                 SigningCredentials = creds
             };
 
