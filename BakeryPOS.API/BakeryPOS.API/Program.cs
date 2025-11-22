@@ -14,6 +14,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json.Serialization;
 using BakeryPOS.API.Hubs;
+using System.Globalization;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -186,6 +187,16 @@ if (!Directory.Exists(imagesDir))
 app.UseStaticFiles();
 
 app.MapControllers();
+
+// --- ADD THIS BLOCK TO FIX CURRENCY SYMBOL ---
+var defaultCulture = new CultureInfo("en-US"); // Use "en-US" for $ (Dollars)
+// var defaultCulture = new CultureInfo("fr-MA"); // Use "fr-MA" for MAD (Moroccan Dirham)
+// var defaultCulture = new CultureInfo("ar-EG"); // Use "ar-EG" for EGP (Egyptian Pound)
+
+defaultCulture.NumberFormat.CurrencySymbol = "$"; // Optional: Force a specific symbol if needed
+
+CultureInfo.DefaultThreadCurrentCulture = defaultCulture;
+CultureInfo.DefaultThreadCurrentUICulture = defaultCulture;
 
 app.MapHub<RemovalHub>("/hubs/removal");
 
