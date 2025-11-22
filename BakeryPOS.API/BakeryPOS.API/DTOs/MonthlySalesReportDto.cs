@@ -30,5 +30,6 @@
         public List<CashierPerformanceDto> CashierPerformance { get; set; } = new List<CashierPerformanceDto>();
         public List<TopCustomerDto> TopCustomers { get; set; } = new List<TopCustomerDto>();
         public List<DailyBreakdownDto> DailySalesBreakdown { get; set; } = new List<DailyBreakdownDto>();
+        public List<PaymentMethodStatsDto> PaymentBreakdown { get; set; } = new();
     }
 }

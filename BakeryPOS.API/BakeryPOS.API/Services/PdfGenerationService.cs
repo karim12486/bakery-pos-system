@@ -55,6 +55,26 @@ namespace BakeryPOS.API.Services
                         });
                         col.Spacing(20);
 
+                        // --- NEW PAYMENT TABLE ---
+                        col.Item().Text("Détails des Paiements").Bold().FontSize(14);
+                        col.Item().Table(table =>
+                        {
+                            // Copy the exact same table definition code from above (it uses the same DTO type)
+                            table.ColumnsDefinition(c => { c.RelativeColumn(); c.ConstantColumn(100); c.ConstantColumn(100); });
+                            table.Header(h => {
+                                h.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Méthode").Bold();
+                                h.Cell().Background(Colors.Grey.Lighten2).Padding(5).AlignRight().Text("Montant").Bold();
+                                h.Cell().Background(Colors.Grey.Lighten2).Padding(5).AlignRight().Text("Trans.").Bold();
+                            });
+
+                            foreach (var item in reportDto.PaymentBreakdown)
+                            {
+                                table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(5).Text(TranslatePaymentMethod(item.MethodName));
+                                table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(5).AlignRight().Text($"{item.TotalAmount:C}");
+                                table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(5).AlignRight().Text($"{item.TransactionCount}");
+                            }
+                        });
+                        col.Spacing(20);
                         // Sales by Cashier Table
                         col.Item().Text("Performance par Caissier").Bold().FontSize(14);
                         col.Item().Table(table =>
@@ -109,7 +129,29 @@ namespace BakeryPOS.API.Services
                                 .Column(c => { c.Item().Text("Panier Moyen").SemiBold(); c.Item().Text($"{reportDto.AverageTransactionValue:C}").FontSize(14); });
                         });
                         col.Spacing(20);
+                        // --- NEW PAYMENT TABLE ---
+                        col.Item().Text("Répartition des Paiements").Bold().FontSize(14);
+                        col.Item().Table(table =>
+                        {
+                            table.ColumnsDefinition(c => { c.RelativeColumn(); c.ConstantColumn(100); c.ConstantColumn(100); });
 
+                            table.Header(h => {
+                                h.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Méthode").Bold();
+                                h.Cell().Background(Colors.Grey.Lighten2).Padding(5).AlignRight().Text("Montant").Bold();
+                                h.Cell().Background(Colors.Grey.Lighten2).Padding(5).AlignRight().Text("Trans.").Bold();
+                            });
+
+                            foreach (var item in reportDto.PaymentBreakdown)
+                            {
+                                table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(5).Text(TranslatePaymentMethod(item.MethodName));
+                                table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(5).AlignRight().Text($"{item.TotalAmount:C}");
+                                table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(5).AlignRight().Text($"{item.TransactionCount}");
+                            }
+                        });
+                        // -------------------------
+
+                        col.Spacing(20);
+                        // ... Sales by Cashier Table ...
                         // Two columns for details
                         col.Item().Row(row =>
                         {
@@ -201,6 +243,17 @@ namespace BakeryPOS.API.Services
                     page.Footer().AlignCenter().Text(text => { text.Span("Page "); text.CurrentPageNumber(); });
                 });
             }).GeneratePdf();
+        }
+
+        private string TranslatePaymentMethod(string method)
+        {
+            return method switch
+            {
+                "Cash" => "Espèces",
+                "Card" => "Carte Bancaire",
+                "Credit" => "Crédit / À Terme",
+                _ => method
+            };
         }
     }
 }

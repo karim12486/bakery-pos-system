@@ -38,12 +38,23 @@ namespace BakeryPOS.API.Services
                 })
                 .ToList();
 
+            var paymentStats = salesForDay
+                .GroupBy(s => s.PaymentMethod)
+                .Select(g => new PaymentMethodStatsDto
+                {
+                    MethodName = g.Key.ToString(),
+                    TransactionCount = g.Count(),
+                    TotalAmount = g.Sum(s => s.FinalAmount) // Or TotalAmount - DiscountAmount
+                })
+                .ToList();
+
             var report = new DailySalesReportDto
             {
                 ReportDate = startDate,
                 SalesByCashier = salesByCashier,
                 GrandTotalTransactions = salesForDay.Count,
-                GrandTotalSalesValue = grandTotalSalesValue // Use recalculated value
+                GrandTotalSalesValue = grandTotalSalesValue, // Use recalculated value
+                PaymentBreakdown = paymentStats
             };
 
             return report;
@@ -118,6 +129,16 @@ namespace BakeryPOS.API.Services
                 .OrderBy(d => d.Day)
                 .ToList();
 
+            var paymentStats = salesForMonth
+                .GroupBy(s => s.PaymentMethod)
+                .Select(g => new PaymentMethodStatsDto
+                {
+                    MethodName = g.Key.ToString(),
+                    TransactionCount = g.Count(),
+                    TotalAmount = g.Sum(s => s.TotalAmount - s.DiscountAmount)
+                })
+                .ToList();
+
             // Assemble the final report object with our recalculated totals
             var report = new MonthlySalesReportDto
             {
@@ -129,7 +150,8 @@ namespace BakeryPOS.API.Services
                 TopSellingProducts = topProducts,
                 CashierPerformance = cashierPerformance,
                 TopCustomers = topCustomers,
-                DailySalesBreakdown = dailySales
+                DailySalesBreakdown = dailySales,
+                PaymentBreakdown = paymentStats
             };
 
             return report;
