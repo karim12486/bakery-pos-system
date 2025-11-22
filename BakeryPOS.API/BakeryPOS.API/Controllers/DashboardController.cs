@@ -328,5 +328,131 @@ namespace BakeryPOS.API.Controllers
 
             return Ok(topClients);
         }
+
+        // GET: api/dashboard/financialstats?period=month
+        [HttpGet("financialstats")]
+        public async Task<ActionResult<IEnumerable<FinancialStatsDto>>> GetFinancialStats([FromQuery] string period = "month")
+        {
+            var today = DateTime.UtcNow.Date;
+            List<FinancialStatsDto> stats = new List<FinancialStatsDto>();
+
+            if (period.ToLower() == "year")
+            {
+                // --- YEAR VIEW: Group by Month (Jan, Feb...) ---
+                var startOfYear = new DateTime(today.Year, 1, 1);
+
+                // 1. Get Sales
+                var salesData = await _context.Sales
+                    .Where(s => s.SaleDate >= startOfYear)
+                    .GroupBy(s => s.SaleDate.Month)
+                    .Select(g => new { Month = g.Key, Amount = g.Sum(s => s.FinalAmount) })
+                    .ToListAsync();
+
+                // 2. Get Expenses
+                var expenseData = await _context.Expenses
+                    .Where(e => e.Date >= startOfYear)
+                    .GroupBy(e => e.Date.Month)
+                    .Select(g => new { Month = g.Key, Amount = g.Sum(e => e.Amount) })
+                    .ToListAsync();
+
+                // 3. Merge (12 Months)
+                for (int i = 1; i <= 12; i++)
+                {
+                    var revenue = salesData.FirstOrDefault(s => s.Month == i)?.Amount ?? 0;
+                    var expense = expenseData.FirstOrDefault(e => e.Month == i)?.Amount ?? 0;
+
+                    stats.Add(new FinancialStatsDto
+                    {
+                        Label = new DateTime(today.Year, i, 1).ToString("MMM"), // "Jan", "Feb"
+                        Revenue = revenue,
+                        Expenses = expense
+                    });
+                }
+            }
+            else if (period.ToLower() == "month")
+            {
+                // --- MONTH VIEW: Group by Week (Week 1, Week 2...) ---
+                var startOfMonth = new DateTime(today.Year, today.Month, 1);
+                var endOfMonth = startOfMonth.AddMonths(1);
+
+                // 1. Get raw data for the month
+                var salesData = await _context.Sales
+                    .Where(s => s.SaleDate >= startOfMonth && s.SaleDate < endOfMonth)
+                    .Select(s => new { s.SaleDate, s.FinalAmount })
+                    .ToListAsync();
+
+                var expenseData = await _context.Expenses
+                    .Where(e => e.Date >= startOfMonth && e.Date < endOfMonth)
+                    .Select(e => new { e.Date, e.Amount })
+                    .ToListAsync();
+
+                // 2. Group into 4-5 Weeks in Memory
+                // Logic: Week 1 = Days 1-7, Week 2 = Days 8-14, etc.
+                var weeksInMonth = Enumerable.Range(0, 5); // Approx 5 weeks max
+
+                foreach (var w in weeksInMonth)
+                {
+                    var weekStartDay = (w * 7) + 1;
+                    var weekEndDay = (w * 7) + 7;
+
+                    // Filter data for this specific week range
+                    var weekRevenue = salesData
+                        .Where(s => s.SaleDate.Day >= weekStartDay && s.SaleDate.Day <= weekEndDay)
+                        .Sum(s => s.FinalAmount);
+
+                    var weekExpense = expenseData
+                        .Where(e => e.Date.Day >= weekStartDay && e.Date.Day <= weekEndDay)
+                        .Sum(e => e.Amount);
+
+                    // Only add if the week actually exists in this month (e.g. ignore Week 5 if month has 28 days)
+                    if (weekStartDay <= DateTime.DaysInMonth(today.Year, today.Month))
+                    {
+                        stats.Add(new FinancialStatsDto
+                        {
+                            Label = $"Week {w + 1}",
+                            Revenue = weekRevenue,
+                            Expenses = weekExpense
+                        });
+                    }
+                }
+            }
+            else
+            {
+                // --- WEEK VIEW: Group by Day (Mon, Tue...) ---
+                // Default to last 7 days
+                var startOfWeek = today.AddDays(-6); // Go back 6 days + today = 7 days
+
+                // 1. Get Sales
+                var salesData = await _context.Sales
+                    .Where(s => s.SaleDate >= startOfWeek)
+                    .GroupBy(s => s.SaleDate.Date)
+                    .Select(g => new { Date = g.Key, Amount = g.Sum(s => s.FinalAmount) })
+                    .ToListAsync();
+
+                // 2. Get Expenses
+                var expenseData = await _context.Expenses
+                    .Where(e => e.Date >= startOfWeek)
+                    .GroupBy(e => e.Date.Date)
+                    .Select(g => new { Date = g.Key, Amount = g.Sum(e => e.Amount) })
+                    .ToListAsync();
+
+                // 3. Merge (7 Days)
+                for (int i = 0; i < 7; i++)
+                {
+                    var date = startOfWeek.AddDays(i);
+                    var revenue = salesData.FirstOrDefault(s => s.Date == date)?.Amount ?? 0;
+                    var expense = expenseData.FirstOrDefault(e => e.Date == date)?.Amount ?? 0;
+
+                    stats.Add(new FinancialStatsDto
+                    {
+                        Label = date.DayOfWeek.ToString(), // "Monday", "Tuesday"
+                        Revenue = revenue,
+                        Expenses = expense
+                    });
+                }
+            }
+
+            return Ok(stats);
+        }
     }
 }
