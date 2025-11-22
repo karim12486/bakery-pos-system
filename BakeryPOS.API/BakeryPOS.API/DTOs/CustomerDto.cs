@@ -9,5 +9,6 @@
         public decimal CurrentBalance { get; set; } // Negative means they owe money
         public decimal DiscountPercentage { get; set; }
         public string? ImageUrl { get; set; }
+        public DateTime CreatedAt { get; set; }
     }
 }
