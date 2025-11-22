@@ -1,6 +1,7 @@
 ﻿using AutoMapper;
 using BakeryPOS.API.Controllers;
 using BakeryPOS.API.Core.Entities;
+using BakeryPOS.API.Core.Enums;
 using BakeryPOS.API.DTOs;
 
 namespace BakeryPOS.API.Mappers
@@ -69,6 +70,10 @@ namespace BakeryPOS.API.Mappers
                 .ForMember(dest => dest.TotalSpent, opt => opt.MapFrom(src => src.Sales.Sum(s => s.FinalAmount)))
                 .ForMember(dest => dest.TotalDiscount, opt => opt.MapFrom(src => src.Sales.Sum(s => s.DiscountAmount)))
                 .ForMember(dest => dest.OutstandingBalance, opt => opt.MapFrom(src => src.CurrentBalance < 0 ? src.CurrentBalance * -1 : 0));
+
+            CreateMap<User, UserDetailDto>()
+                .ForMember(dest => dest.Role, opt => opt.MapFrom(src =>
+                    src.Permissions.HasFlag(UserPermissions.Admin) ? "Admin" : "Cashier"));
         }
     }
 }

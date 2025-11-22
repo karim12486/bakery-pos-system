@@ -159,22 +159,50 @@ namespace BakeryPOS.API.Controllers
         [HttpGet("topselling")]
         public async Task<ActionResult<IEnumerable<TopSellingProductDto>>> GetTopSellingProducts([FromQuery] int count = 5)
         {
-            // Query all sale details
+            // 1. Define Periods
+            var thisMonthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+            var lastMonthStart = thisMonthStart.AddMonths(-1);
+
+            // 2. Get Top Products for THIS Month
             var topProducts = await _context.SaleDetails
-                .Include(sd => sd.Product)
+                .Where(sd => sd.Sale.SaleDate >= thisMonthStart)
                 .GroupBy(sd => new { sd.ProductId, sd.Product.Name })
-                .Select(group => new TopSellingProductDto
+                .Select(g => new
                 {
-                    ProductId = group.Key.ProductId,
-                    ProductName = group.Key.Name,
-                    TotalSold = group.Sum(sd => sd.Quantity),
-                    TotalRevenue = group.Sum(sd => sd.Quantity * sd.UnitPrice)
+                    g.Key.ProductId,
+                    g.Key.Name,
+                    Revenue = g.Sum(sd => sd.Quantity * sd.UnitPrice),
+                    Sold = g.Sum(sd => sd.Quantity)
                 })
-                .OrderByDescending(p => p.TotalRevenue)
+                .OrderByDescending(x => x.Revenue)
                 .Take(count)
                 .ToListAsync();
 
-            return Ok(topProducts);
+            // 3. Get Revenue for the SAME products in LAST Month
+            var topProductIds = topProducts.Select(p => p.ProductId).ToList();
+
+            var lastMonthRevenues = await _context.SaleDetails
+                .Where(sd => sd.Sale.SaleDate >= lastMonthStart && sd.Sale.SaleDate < thisMonthStart)
+                .Where(sd => topProductIds.Contains(sd.ProductId))
+                .GroupBy(sd => sd.ProductId)
+                .Select(g => new { ProductId = g.Key, Revenue = g.Sum(sd => sd.Quantity * sd.UnitPrice) })
+                .ToDictionaryAsync(x => x.ProductId, x => x.Revenue);
+
+            // 4. Merge and Calculate Growth
+            var result = topProducts.Select(p =>
+            {
+                decimal lastMonthRev = lastMonthRevenues.ContainsKey(p.ProductId) ? lastMonthRevenues[p.ProductId] : 0;
+                return new TopSellingProductDto
+                {
+                    ProductId = p.ProductId,
+                    ProductName = p.Name,
+                    TotalSold = p.Sold,
+                    TotalRevenue = p.Revenue,
+                    GrowthPercentage = CalculatePercentageChange(p.Revenue, lastMonthRev) // Uses the helper method we made earlier
+                };
+            });
+
+            return Ok(result);
         }
 
 
