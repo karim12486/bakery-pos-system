@@ -20,14 +20,14 @@ namespace BakeryPOS.API.Controllers
         {
             if (file == null || file.Length == 0)
             {
-                return BadRequest(new { message = "No file uploaded." });
+                return BadRequest(new { message = "Aucun fichier téléchargé." });
             }
 
             var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif" };
             var extension = Path.GetExtension(file.FileName).ToLower();
             if (!allowedExtensions.Contains(extension))
             {
-                return BadRequest(new { message = "Invalid file type." });
+                return BadRequest(new { message = "Type de fichier invalide." });
             }
 
             var uniqueFileName = $"{Guid.NewGuid()}{extension}";

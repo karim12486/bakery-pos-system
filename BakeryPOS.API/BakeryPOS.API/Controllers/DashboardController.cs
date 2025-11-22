@@ -126,8 +126,8 @@ namespace BakeryPOS.API.Controllers
             {
                 notifications.Add(new
                 {
-                    type = "LowStock",
-                    message = $"{p.Name} is running low ({p.StockQuantity} left).",
+                    type = "Stock limité",
+                    message = $"{p.Name} est presque épuisé ({p.StockQuantity} restants).",
                     severity = "warning",
                     time = DateTime.UtcNow
                 });
@@ -143,8 +143,8 @@ namespace BakeryPOS.API.Controllers
             {
                 notifications.Add(new
                 {
-                    type = "PendingPayment",
-                    message = $"{c.Name} has an outstanding balance of {Math.Abs(c.CurrentBalance):C}.",
+                    type = "Paiement en attente",
+                    message = $"{c.Name} a un solde impayé de {Math.Abs(c.CurrentBalance):C}.",
                     severity = "danger",
                     time = DateTime.UtcNow
                 });

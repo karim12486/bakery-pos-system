@@ -39,7 +39,7 @@ namespace BakeryPOS.API.Controllers
             // 3. Check if the user exists
             if (user == null)
             {
-                return Unauthorized("Invalid username or password.");
+                return Unauthorized("Nom d'utilisateur ou mot de passe incorrect.");
             }
 
             // 4. Verify the password using our service
@@ -47,7 +47,7 @@ namespace BakeryPOS.API.Controllers
 
             if (!isPasswordValid)
             {
-                return Unauthorized("Invalid username or password.");
+                return Unauthorized("Nom d'utilisateur ou mot de passe incorrect.");
             }
 
             // Determine Role based on permissions (Simple logic)

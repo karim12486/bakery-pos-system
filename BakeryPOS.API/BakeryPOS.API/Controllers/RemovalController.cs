@@ -56,7 +56,7 @@ namespace BakeryPOS.API.Controllers
             // 3. Use the Hub to send a real-time message to all connected admins
             await _hubContext.Clients.Group("Admins").SendAsync("NewRemovalRequest", notification);
 
-            return Ok(new { message = "Removal request sent to admin for approval." });
+            return Ok(new { message = "Demande de suppression envoyée à l'administrateur pour approbation." });
         }
 
         // The only change is fixing the typo in [FromQuery]
@@ -73,8 +73,8 @@ namespace BakeryPOS.API.Controllers
                                 .Include(r => r.RequestingUser)
                                 .FirstOrDefaultAsync(r => r.Id == requestId);
 
-            if (request == null) return NotFound("Request not found.");
-            if (request.Status != RequestStatus.Pending) return BadRequest("This request has already been handled.");
+            if (request == null) return NotFound("Requête introuvable.");
+            if (request.Status != RequestStatus.Pending) return BadRequest("Cette demande a déjà été traitée.");
 
             request.Status = responseDto.IsApproved ? RequestStatus.Approved : RequestStatus.Rejected;
             request.ApprovingUserId = admin.Id;
@@ -82,7 +82,7 @@ namespace BakeryPOS.API.Controllers
 
             if (string.IsNullOrEmpty(cashierConnectionId))
             {
-                return BadRequest("Cashier connection ID is missing.");
+                return BadRequest("L'identifiant de connexion du caissier est manquant.");
             }
 
             var update = new
@@ -95,7 +95,7 @@ namespace BakeryPOS.API.Controllers
 
             await _hubContext.Clients.Client(cashierConnectionId).SendAsync("RemovalRequestStatusChanged", update);
 
-            return Ok(new { message = $"Request {request.Status}." });
+            return Ok(new { message = $"Demande {request.Status}." });
         }
     }
 }

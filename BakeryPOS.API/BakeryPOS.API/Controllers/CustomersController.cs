@@ -116,7 +116,7 @@ namespace BakeryPOS.API.Controllers
             var customer = await _context.Customers.FindAsync(id);
             if (customer == null)
             {
-                return NotFound("Customer not found.");
+                return NotFound("Client introuvable.");
             }
 
             // --- Get the current user who is recording the payment ---
@@ -144,7 +144,7 @@ namespace BakeryPOS.API.Controllers
             // --- Save all changes ---
             await _context.SaveChangesAsync();
 
-            return Ok(new { message = "Payment recorded successfully.", newBalance = customer.CurrentBalance });
+            return Ok(new { message = "Paiement enregistré avec succès.", newBalance = customer.CurrentBalance });
         }
 
         // PUT: api/customers/5
@@ -189,7 +189,7 @@ namespace BakeryPOS.API.Controllers
             var hasSales = await _context.Sales.AnyAsync(s => s.CustomerId == id);
             if (hasSales)
             {
-                return BadRequest("Cannot delete a customer with existing sales history. Consider deactivating them instead.");
+                return BadRequest("Impossible de supprimer un client ayant un historique de ventes. Veuillez plutôt le désactiver.");
             }
 
             _context.Customers.Remove(customerFromDb);

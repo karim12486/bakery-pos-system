@@ -38,7 +38,7 @@ namespace BakeryPOS.API.Controllers
             var usernameLower = userForCreationDto.Username.ToLower();
             if (await _context.Users.AnyAsync(u => u.Username.ToLower() == usernameLower))
             {
-                return BadRequest("Username is already taken.");
+                return BadRequest("Ce nom d'utilisateur est déjà pris.");
             }
 
             // 3. Create the new user entity
@@ -57,7 +57,7 @@ namespace BakeryPOS.API.Controllers
             await _context.SaveChangesAsync();
 
             // 5. Return a success response
-            return StatusCode(201, "User created successfully.");
+            return StatusCode(201, "Utilisateur créé avec succès.");
         }
 
         // GET: api/admin/users
@@ -121,7 +121,7 @@ namespace BakeryPOS.API.Controllers
             var currentUsername = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (userFromDb.Username.Equals(currentUsername, StringComparison.OrdinalIgnoreCase))
             {
-                return BadRequest("You cannot deactivate your own account.");
+                return BadRequest("Vous ne pouvez pas désactiver votre propre compte.");
             }
 
             // Soft delete: We just mark the user as inactive.
@@ -139,7 +139,7 @@ namespace BakeryPOS.API.Controllers
             var userFromDb = await _context.Users.FindAsync(id);
             if (userFromDb == null)
             {
-                return NotFound("User not found.");
+                return NotFound("Utilisateur introuvable.");
             }
 
             // Hash the new password and update the user
@@ -147,7 +147,7 @@ namespace BakeryPOS.API.Controllers
 
             await _context.SaveChangesAsync();
 
-            return Ok("Password updated successfully.");
+            return Ok("Mot de passe mis à jour avec succès.");
         }
 
         // GET: api/admin/permissions

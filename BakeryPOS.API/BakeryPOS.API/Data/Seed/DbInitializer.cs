@@ -19,7 +19,7 @@ namespace BakeryPOS.API.Data.Seed
                 var adminUser = new User
                 {
                     Username = "admin",
-                    PasswordHash = passwordService.HashPassword("password"),
+                    PasswordHash = passwordService.HashPassword("Admin123#"),
                     FullName = "Default Admin",
                     IsActive = true,
                     CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc),

@@ -62,7 +62,7 @@ namespace BakeryPOS.API.Controllers
             //var reportData = JsonSerializer.Deserialize<object>(report.ReportDataJson);
 
             //return Ok(reportData);
-            return Ok($"This will eventually download the file at: {report.PdfFilePath}");
+            return Ok($"Cela finira par télécharger le fichier à l'adresse: {report.PdfFilePath}");
         }
 
 
@@ -91,13 +91,13 @@ namespace BakeryPOS.API.Controllers
             var report = await _context.Reports.FindAsync(id);
             if (report == null)
             {
-                return NotFound("Report not found.");
+                return NotFound("Rapport introuvable.");
             }
 
             // 2. Check if the file actually exists on the server
             if (string.IsNullOrEmpty(report.PdfFilePath) || !System.IO.File.Exists(report.PdfFilePath))
             {
-                return NotFound("The report PDF file could not be found on the server.");
+                return NotFound("Le fichier PDF du rapport est introuvable sur le serveur.");
             }
 
             // 3. Read the file into a byte array

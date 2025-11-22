@@ -31,7 +31,7 @@ namespace BakeryPOS.API.Controllers
             var product = await _context.Products.FindAsync(stockAdditionDto.ProductId);
             if (product == null)
             {
-                return NotFound($"Product with ID {stockAdditionDto.ProductId} not found.");
+                return NotFound($"Produit introuvable.");
             }
 
             // --- Get the current user ---
@@ -58,7 +58,7 @@ namespace BakeryPOS.API.Controllers
             // --- Save all changes in a single transaction ---
             await _context.SaveChangesAsync();
 
-            return Ok($"Stock for '{product.Name}' updated successfully. New quantity: {product.StockQuantity}");
+            return Ok($"Stock pour '{product.Name}' mis à jour avec succès. Nouvelle quantité : {product.StockQuantity}");
         }
 
         // GET: api/inventory/history/{productId}
@@ -75,7 +75,7 @@ namespace BakeryPOS.API.Controllers
 
             if (!movements.Any())
             {
-                return NotFound($"No stock history found for product with ID {productId}.");
+                return NotFound($"Aucun historique de stock trouvé pour le produit portant l'identifiant {productId}.");
             }
 
             // Manually map to DTOs

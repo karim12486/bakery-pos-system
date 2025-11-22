@@ -3,17 +3,21 @@ using BakeryPOS.API.DTOs;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using System.Globalization;
 
 namespace BakeryPOS.API.Services
 {
     public class PdfGenerationService : IPdfGenerationService
     {
+        // We enforce French culture for dates inside the PDF generation explicitly
+        private readonly CultureInfo _culture = new CultureInfo("fr-MA");
+
         public PdfGenerationService()
         {
             QuestPDF.Settings.License = LicenseType.Community;
         }
 
-        // --- 1. Daily Sales Report (Enhanced) ---
+        // --- 1. Rapport Journalier (Daily) ---
         public byte[] GenerateDailySalesReport(DailySalesReportDto reportDto)
         {
             return Document.Create(container =>
@@ -26,8 +30,9 @@ namespace BakeryPOS.API.Services
                     // Header
                     page.Header().Row(row =>
                     {
-                        row.RelativeItem().Text($"Daily Sales Report").Bold().FontSize(20);
-                        row.ConstantItem(100).Text($"{reportDto.ReportDate:yyyy-MM-dd}").AlignRight();
+                        row.RelativeItem().Text("Rapport Journalier des Ventes").Bold().FontSize(20);
+                        // Date format: Jeudi, 22 Novembre 2025
+                        row.ConstantItem(150).Text($"{reportDto.ReportDate.ToString("D", _culture)}").AlignRight();
                     });
 
                     // Content
@@ -38,27 +43,27 @@ namespace BakeryPOS.API.Services
                         {
                             row.RelativeItem().Border(1).Background(Colors.Grey.Lighten4).Padding(5)
                                 .Column(c => {
-                                    c.Item().Text("Total Sales").SemiBold();
+                                    c.Item().Text("Total des Ventes").SemiBold();
                                     c.Item().Text($"{reportDto.GrandTotalSalesValue:C}").FontSize(16);
                                 });
                             row.Spacing(10);
                             row.RelativeItem().Border(1).Background(Colors.Grey.Lighten4).Padding(5)
                                 .Column(c => {
-                                    c.Item().Text("Total Transactions").SemiBold();
+                                    c.Item().Text("Transactions").SemiBold();
                                     c.Item().Text($"{reportDto.GrandTotalTransactions}").FontSize(16);
                                 });
                         });
                         col.Spacing(20);
 
                         // Sales by Cashier Table
-                        col.Item().Text("Sales by Cashier").Bold().FontSize(14);
+                        col.Item().Text("Performance par Caissier").Bold().FontSize(14);
                         col.Item().Table(table =>
                         {
                             table.ColumnsDefinition(c => { c.RelativeColumn(); c.ConstantColumn(100); c.ConstantColumn(100); });
                             table.Header(h => {
-                                h.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Cashier").Bold();
-                                h.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Total Sales").Bold();
-                                h.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Transactions").Bold();
+                                h.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Caissier").Bold();
+                                h.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Ventes").Bold();
+                                h.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Trans.").Bold();
                             });
                             foreach (var item in reportDto.SalesByCashier)
                             {
@@ -75,10 +80,12 @@ namespace BakeryPOS.API.Services
             }).GeneratePdf();
         }
 
-        // --- 2. Monthly Sales Report (Enhanced) ---
+        // --- 2. Rapport Mensuel (Monthly) ---
         public byte[] GenerateMonthlySalesReport(MonthlySalesReportDto reportDto)
         {
-            var monthName = new DateTime(reportDto.Year, reportDto.Month, 1).ToString("MMMM yyyy");
+            // Month Name: e.g., "novembre 2025"
+            var monthName = new DateTime(reportDto.Year, reportDto.Month, 1).ToString("MMMM yyyy", _culture);
+
             return Document.Create(container =>
             {
                 container.Page(page =>
@@ -86,20 +93,20 @@ namespace BakeryPOS.API.Services
                     page.Margin(40);
                     page.DefaultTextStyle(x => x.FontSize(10));
 
-                    page.Header().Text($"Monthly Sales Report - {monthName}").Bold().FontSize(20);
+                    page.Header().Text($"Rapport Mensuel - {monthName}").Bold().FontSize(20);
                     page.Content().Column(col =>
                     {
                         // Summary Cards
                         col.Item().Row(row =>
                         {
                             row.RelativeItem().Border(1).Background(Colors.Grey.Lighten4).Padding(5)
-                                .Column(c => { c.Item().Text("Total Sales").SemiBold(); c.Item().Text($"{reportDto.GrandTotalSalesValue:C}").FontSize(14); });
+                                .Column(c => { c.Item().Text("Total des Ventes").SemiBold(); c.Item().Text($"{reportDto.GrandTotalSalesValue:C}").FontSize(14); });
                             row.Spacing(10);
                             row.RelativeItem().Border(1).Background(Colors.Grey.Lighten4).Padding(5)
-                                .Column(c => { c.Item().Text("Total Transactions").SemiBold(); c.Item().Text($"{reportDto.GrandTotalTransactions}").FontSize(14); });
+                                .Column(c => { c.Item().Text("Transactions").SemiBold(); c.Item().Text($"{reportDto.GrandTotalTransactions}").FontSize(14); });
                             row.Spacing(10);
                             row.RelativeItem().Border(1).Background(Colors.Grey.Lighten4).Padding(5)
-                                .Column(c => { c.Item().Text("Avg. Transaction").SemiBold(); c.Item().Text($"{reportDto.AverageTransactionValue:C}").FontSize(14); });
+                                .Column(c => { c.Item().Text("Panier Moyen").SemiBold(); c.Item().Text($"{reportDto.AverageTransactionValue:C}").FontSize(14); });
                         });
                         col.Spacing(20);
 
@@ -109,11 +116,11 @@ namespace BakeryPOS.API.Services
                             // Left Column: Top Products
                             row.RelativeItem().Column(c =>
                             {
-                                c.Item().Text("Top 5 Selling Products").Bold().FontSize(14);
+                                c.Item().Text("Top 5 Produits").Bold().FontSize(14);
                                 c.Item().Table(table =>
                                 {
                                     table.ColumnsDefinition(cd => { cd.RelativeColumn(); cd.ConstantColumn(70); });
-                                    table.Header(h => { h.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Product").Bold(); h.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Revenue").Bold(); });
+                                    table.Header(h => { h.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Produit").Bold(); h.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Revenu").Bold(); });
                                     foreach (var item in reportDto.TopSellingProducts)
                                     {
                                         table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(5).Text(item.ProductName);
@@ -127,11 +134,11 @@ namespace BakeryPOS.API.Services
                             // Right Column: Top Customers
                             row.RelativeItem().Column(c =>
                             {
-                                c.Item().Text("Top 5 Customers").Bold().FontSize(14);
+                                c.Item().Text("Top 5 Clients").Bold().FontSize(14);
                                 c.Item().Table(table =>
                                 {
                                     table.ColumnsDefinition(cd => { cd.RelativeColumn(); cd.ConstantColumn(70); });
-                                    table.Header(h => { h.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Customer").Bold(); h.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Total Spent").Bold(); });
+                                    table.Header(h => { h.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Client").Bold(); h.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Dépensé").Bold(); });
                                     foreach (var item in reportDto.TopCustomers)
                                     {
                                         table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(5).Text(item.CustomerName);
@@ -147,7 +154,7 @@ namespace BakeryPOS.API.Services
             }).GeneratePdf();
         }
 
-        // --- 3. Special Product Report (Enhanced) ---
+        // --- 3. Produits Spéciaux (Special Products) ---
         public byte[] GenerateSpecialProductReport(SpecialProductReportDto reportDto)
         {
             return Document.Create(container =>
@@ -157,7 +164,7 @@ namespace BakeryPOS.API.Services
                     page.Margin(40);
                     page.DefaultTextStyle(x => x.FontSize(10));
 
-                    page.Header().Text($"Special Product Performance - {reportDto.ReportDate:yyyy-MM-dd}").Bold().FontSize(20);
+                    page.Header().Text($"Performance Produits Spéciaux - {reportDto.ReportDate.ToString("d", _culture)}").Bold().FontSize(20);
                     page.Content().Table(table =>
                     {
                         table.ColumnsDefinition(columns =>
@@ -172,12 +179,12 @@ namespace BakeryPOS.API.Services
 
                         table.Header(header =>
                         {
-                            header.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Product").Bold();
-                            header.Cell().Background(Colors.Grey.Lighten2).Padding(5).AlignRight().Text("Added").Bold();
-                            header.Cell().Background(Colors.Grey.Lighten2).Padding(5).AlignRight().Text("Sold").Bold();
-                            header.Cell().Background(Colors.Grey.Lighten2).Padding(5).AlignRight().Text("Revenue").Bold();
-                            header.Cell().Background(Colors.Grey.Lighten2).Padding(5).AlignRight().Text("Profit").Bold();
-                            header.Cell().Background(Colors.Grey.Lighten2).Padding(5).AlignRight().Text("Margin").Bold();
+                            header.Cell().Background(Colors.Grey.Lighten2).Padding(5).Text("Produit").Bold();
+                            header.Cell().Background(Colors.Grey.Lighten2).Padding(5).AlignRight().Text("Ajouté").Bold();
+                            header.Cell().Background(Colors.Grey.Lighten2).Padding(5).AlignRight().Text("Vendu").Bold();
+                            header.Cell().Background(Colors.Grey.Lighten2).Padding(5).AlignRight().Text("Revenu").Bold();
+                            header.Cell().Background(Colors.Grey.Lighten2).Padding(5).AlignRight().Text("Bénéfice").Bold();
+                            header.Cell().Background(Colors.Grey.Lighten2).Padding(5).AlignRight().Text("Marge").Bold();
                         });
 
                         foreach (var product in reportDto.ProductDetails)

@@ -40,7 +40,7 @@ namespace BakeryPOS.API.Controllers
         {
             if (await _context.Categories.AnyAsync(c => c.Name.ToLower() == categoryDto.Name.ToLower()))
             {
-                return BadRequest("Category name already exists.");
+                return BadRequest("Ce nom de catégorie existe déjà.");
             }
 
             var newCategory = _mapper.Map<Category>(categoryDto);

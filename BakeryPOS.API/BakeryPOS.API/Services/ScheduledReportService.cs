@@ -2,6 +2,8 @@
 using BakeryPOS.API.Core.Interfaces;
 using BakeryPOS.API.Data;
 using BakeryPOS.API.DTOs;
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
 
 namespace BakeryPOS.API.Services
@@ -12,6 +14,9 @@ namespace BakeryPOS.API.Services
         private readonly IServiceScopeFactory _scopeFactory;
         private const string ReportStorageFolder = "GeneratedReports";
 
+        // Ensure we use French formatting for dates/currency in the text messages
+        private readonly CultureInfo _culture = new CultureInfo("fr-MA");
+
         public ScheduledReportService(ILogger<ScheduledReportService> logger, IServiceScopeFactory scopeFactory)
         {
             _logger = logger;
@@ -20,7 +25,7 @@ namespace BakeryPOS.API.Services
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("Scheduled Report Service is starting.");
+            _logger.LogInformation("Service de rapports programmés démarré.");
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -32,11 +37,11 @@ namespace BakeryPOS.API.Services
                     var delay = nextMidnightInMorocco - currentTimeInMorocco;
 
                     var nextRunTimeUtc = TimeZoneInfo.ConvertTimeToUtc(nextMidnightInMorocco, moroccoTimeZone);
-                    _logger.LogInformation("Next report cycle will run at: {runTime} (UTC)", nextRunTimeUtc);
+                    _logger.LogInformation("Prochain rapport prévu à : {runTime} (UTC)", nextRunTimeUtc);
 
                     await Task.Delay(delay, stoppingToken);
 
-                    _logger.LogInformation("Starting scheduled report generation...");
+                    _logger.LogInformation("Génération des rapports en cours...");
 
                     using (var scope = _scopeFactory.CreateScope())
                     {
@@ -46,56 +51,119 @@ namespace BakeryPOS.API.Services
                         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
                         var reportDate = currentTimeInMorocco.Date;
-
                         Directory.CreateDirectory(ReportStorageFolder);
 
-                        // --- Daily Report ---
+                        // --- 1. Rapport Journalier ---
                         var dailyReportDto = await reportService.GenerateDailySalesReportAsync(reportDate);
                         var dailyPdfBytes = pdfService.GenerateDailySalesReport(dailyReportDto);
-                        string dailyReportFileName = $"Daily_Sales_{reportDate:yyyy-MM-dd}.pdf";
+                        string dailyReportFileName = $"Rapport_Journalier_{reportDate:yyyy-MM-dd}.pdf";
                         string dailyReportFilePath = Path.Combine(ReportStorageFolder, dailyReportFileName);
                         await File.WriteAllBytesAsync(dailyReportFilePath, dailyPdfBytes, stoppingToken);
-                        await dbContext.Reports.AddAsync(new Report { Type = ReportType.DailySummary, PdfFilePath = dailyReportFilePath });
-                        await notificationService.SendNotificationAsync($"Daily Sales Report for {reportDate:yyyy-MM-dd}", dailyReportFilePath);
-                        _logger.LogInformation("Daily report PDF generated.");
 
-                        // --- Special Product Report ---
+                        await dbContext.Reports.AddAsync(new Report { Type = ReportType.DailySummary, PdfFilePath = dailyReportFilePath });
+
+                        var dailyMessage = FormatDailyReportForTelegram(dailyReportDto);
+                        await notificationService.SendNotificationAsync(dailyMessage, dailyReportFilePath);
+
+                        // --- 2. Rapport Produits Spéciaux ---
                         var specialReportDto = await reportService.GenerateSpecialProductReportAsync(reportDate);
                         if (specialReportDto.ProductDetails.Any())
                         {
                             var specialPdfBytes = pdfService.GenerateSpecialProductReport(specialReportDto);
-                            string specialReportFileName = $"Special_Products_{reportDate:yyyy-MM-dd}.pdf";
+                            string specialReportFileName = $"Produits_Speciaux_{reportDate:yyyy-MM-dd}.pdf";
                             string specialReportFilePath = Path.Combine(ReportStorageFolder, specialReportFileName);
                             await File.WriteAllBytesAsync(specialReportFilePath, specialPdfBytes, stoppingToken);
+
                             await dbContext.Reports.AddAsync(new Report { Type = ReportType.ProductPerformance, PdfFilePath = specialReportFilePath });
-                            await notificationService.SendNotificationAsync($"Special Product Report for {reportDate:yyyy-MM-dd}", specialReportFilePath);
-                            _logger.LogInformation("Special Product report PDF generated.");
+
+                            var specialMessage = FormatSpecialProductReportForTelegram(specialReportDto);
+                            await notificationService.SendNotificationAsync(specialMessage, specialReportFilePath);
                         }
 
-                        // --- Monthly Report (if it's the 1st of the month) ---
+                        // --- 3. Rapport Mensuel (le 1er du mois) ---
                         if (currentTimeInMorocco.Day == 1)
                         {
                             var previousMonth = currentTimeInMorocco.AddMonths(-1);
                             var monthlyReportDto = await reportService.GenerateMonthlySalesReportAsync(previousMonth.Year, previousMonth.Month);
                             var monthlyPdfBytes = pdfService.GenerateMonthlySalesReport(monthlyReportDto);
-                            string monthlyReportFileName = $"Monthly_Sales_{previousMonth:yyyy-MM}.pdf";
+                            string monthlyReportFileName = $"Rapport_Mensuel_{previousMonth:yyyy-MM}.pdf";
                             string monthlyReportFilePath = Path.Combine(ReportStorageFolder, monthlyReportFileName);
                             await File.WriteAllBytesAsync(monthlyReportFilePath, monthlyPdfBytes, stoppingToken);
+
                             await dbContext.Reports.AddAsync(new Report { Type = ReportType.MonthlySummary, PdfFilePath = monthlyReportFilePath });
-                            await notificationService.SendNotificationAsync($"Monthly Sales Report for {previousMonth:MMMM yyyy}", monthlyReportFilePath);
-                            _logger.LogInformation("Monthly report PDF generated.");
+
+                            var monthlyMessage = FormatMonthlyReportForTelegram(monthlyReportDto);
+                            await notificationService.SendNotificationAsync(monthlyMessage, monthlyReportFilePath);
                         }
 
                         await dbContext.SaveChangesAsync();
-                        _logger.LogInformation("All generated reports have been saved to the database.");
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "An error occurred in the scheduled report service.");
+                    _logger.LogError(ex, "Erreur dans le service de rapports.");
                     await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
                 }
             }
+        }
+
+        private string FormatDailyReportForTelegram(DailySalesReportDto report)
+        {
+            var sb = new StringBuilder();
+            // "d" format in French culture gives "22/11/2025"
+            sb.AppendLine($"📊 *Rapport Journalier - {report.ReportDate.ToString("d", _culture)}*");
+            sb.AppendLine("------------------------------------");
+            sb.AppendLine($"💰 *Total Ventes :* {report.GrandTotalSalesValue.ToString("C", _culture)}");
+            sb.AppendLine($"🧾 *Transactions :* {report.GrandTotalTransactions}");
+            sb.AppendLine("------------------------------------");
+
+            if (report.SalesByCashier.Any())
+            {
+                sb.AppendLine("*Ventes par Caissier :*");
+                foreach (var cashierSale in report.SalesByCashier)
+                {
+                    sb.AppendLine($"  👤 {cashierSale.CashierName}: {cashierSale.TotalSalesValue.ToString("C", _culture)} ({cashierSale.TotalTransactions} trans.)");
+                }
+            }
+            else
+            {
+                sb.AppendLine("Aucune vente enregistrée ce jour.");
+            }
+
+            return sb.ToString();
+        }
+
+        private string FormatSpecialProductReportForTelegram(SpecialProductReportDto report)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"⭐ *Produits Spéciaux - {report.ReportDate.ToString("d", _culture)}*");
+            sb.AppendLine("------------------------------------");
+
+            foreach (var item in report.ProductDetails)
+            {
+                sb.AppendLine($"🔹 *{item.ProductName}*");
+                sb.AppendLine($"   ➕ Ajouté : {item.QuantityAdded}");
+                sb.AppendLine($"   🛒 Vendu : {item.QuantitySold}");
+                sb.AppendLine($"   💵 Revenu : {item.TotalRevenue.ToString("C", _culture)}");
+                sb.AppendLine($"   📈 Bénéfice : {item.Profit.ToString("C", _culture)}");
+                sb.AppendLine();
+            }
+
+            return sb.ToString();
+        }
+
+        private string FormatMonthlyReportForTelegram(MonthlySalesReportDto report)
+        {
+            var sb = new StringBuilder();
+            var monthName = new DateTime(report.Year, report.Month, 1).ToString("MMMM yyyy", _culture);
+            sb.AppendLine($"📅 *Rapport Mensuel - {monthName}*");
+            sb.AppendLine("------------------------------------");
+            sb.AppendLine($"💰 *Total Ventes :* {report.GrandTotalSalesValue.ToString("C", _culture)}");
+            sb.AppendLine($"🧾 *Total Transactions :* {report.GrandTotalTransactions}");
+            sb.AppendLine($"📉 *Total Remises :* {report.GrandTotalDiscountAmount.ToString("C", _culture)}");
+            sb.AppendLine($"🛒 *Panier Moyen :* {report.AverageTransactionValue.ToString("C", _culture)}");
+
+            return sb.ToString();
         }
     }
 }

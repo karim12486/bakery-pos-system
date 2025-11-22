@@ -42,7 +42,7 @@ namespace BakeryPOS.API.Controllers
         public async Task<ActionResult<ExpenseCategoryDto>> CreateCategory(ExpenseCategoryForCreateDto categoryDto)
         {
             if (await _context.ExpenseCategories.AnyAsync(c => c.Name.ToLower() == categoryDto.Name.ToLower()))
-                return BadRequest("Category name already exists.");
+                return BadRequest("Ce nom de catégorie existe déjà.");
 
             var newCategory = _mapper.Map<ExpenseCategory>(categoryDto);
             await _context.ExpenseCategories.AddAsync(newCategory);
@@ -86,7 +86,7 @@ namespace BakeryPOS.API.Controllers
             var categoryExists = await _context.ExpenseCategories.AnyAsync(c => c.Id == expenseDto.CategoryId);
             if (!categoryExists)
             {
-                return BadRequest($"Expense category with ID {expenseDto.CategoryId} does not exist.");
+                return BadRequest($"La catégorie de dépenses portant l'identifiant {expenseDto.CategoryId} n'existe pas.");
             }
 
             var username = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -119,7 +119,7 @@ namespace BakeryPOS.API.Controllers
             var categoryExists = await _context.ExpenseCategories.AnyAsync(c => c.Id == expenseDto.CategoryId);
             if (!categoryExists)
             {
-                return BadRequest($"Expense category with ID {expenseDto.CategoryId} does not exist.");
+                return BadRequest($"La catégorie de dépenses portant l'identifiant {expenseDto.CategoryId} n'existe pas.");
             }
 
             _mapper.Map(expenseDto, expenseFromDb);

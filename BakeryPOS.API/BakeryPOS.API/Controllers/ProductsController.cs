@@ -149,7 +149,7 @@ namespace BakeryPOS.API.Controllers
 
             if (product == null)
             {
-                return NotFound(new { message = "Product not found" });
+                return NotFound(new { message = "Produit introuvable" });
             }
 
             var productDto = _mapper.Map<ProductDto>(product);

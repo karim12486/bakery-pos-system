@@ -33,7 +33,7 @@ namespace BakeryPOS.API.Controllers
             // --- Steps 1 & 2: Get User and Products (no change) ---
             var username = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var cashier = await _context.Users.SingleOrDefaultAsync(u => u.Username == username);
-            if (cashier == null) return Unauthorized("Cashier not found.");
+            if (cashier == null) return Unauthorized("Caissier introuvable.");
 
             var productIds = saleForCreateDto.SaleDetails.Select(d => d.ProductId).ToList();
             var productsFromDb = await _context.Products
@@ -44,7 +44,7 @@ namespace BakeryPOS.API.Controllers
             foreach (var item in saleForCreateDto.SaleDetails)
             {
                 if (!productsFromDb.TryGetValue(item.ProductId, out var product))
-                    return BadRequest($"Product with ID {item.ProductId} not found.");
+                    return BadRequest($"Produit avec l'ID {item.ProductId} introuvable.");
                 totalAmount += product.Price * item.Quantity;
             }
 
@@ -55,7 +55,7 @@ namespace BakeryPOS.API.Controllers
             {
                 customer = await _context.Customers.FindAsync(saleForCreateDto.CustomerId.Value);
                 if (customer == null)
-                    return BadRequest($"Customer with ID {saleForCreateDto.CustomerId} not found.");
+                    return BadRequest($"Client introuvable.");
 
                 if (customer.DiscountPercentage > 0)
                 {
@@ -71,13 +71,13 @@ namespace BakeryPOS.API.Controllers
             if (saleForCreateDto.PaymentMethod == PaymentType.Credit)
             {
                 if (customer == null)
-                    return BadRequest("A customer must be selected for credit sales.");
+                    return BadRequest("Un client doit être sélectionné pour la vente à crédit.");
 
                 customer.CurrentBalance -= amountOwed;
             }
             else if (amountOwed > 0)
             {
-                return BadRequest($"Full payment of {finalAmount:C} is required. Only {saleForCreateDto.AmountPaid:C} was provided.");
+                return BadRequest($"Le paiement complet de {finalAmount:C} est requis. Seulement {saleForCreateDto.AmountPaid:C} a été fourni.");
             }
 
             // --- Step 5: Create Entities and Update Stock (no change to this part's logic) ---
@@ -100,7 +100,7 @@ namespace BakeryPOS.API.Controllers
                 // ... (The logic to update stock and create SaleDetails is exactly the same as before)
                 var product = productsFromDb[item.ProductId];
                 if (product.StockQuantity < item.Quantity)
-                    return Conflict($"Not enough stock for {product.Name}.");
+                    return Conflict($"Stock insuffisant pour {product.Name}. Disponible : {product.StockQuantity}, Demandé : {item.Quantity}.");
 
                 product.StockQuantity -= item.Quantity;
                 var saleDetail = new SaleDetail { ProductId = product.Id, Quantity = item.Quantity, UnitPrice = product.Price, Sale = newSale };
@@ -112,7 +112,7 @@ namespace BakeryPOS.API.Controllers
             // --- Step 6: Save Changes (no change) ---
             await _context.SaveChangesAsync();
 
-            return Ok("Sale created successfully.");
+            return Ok(new { message = "Vente enregistrée avec succès." });
         }
 
         [HttpGet]
