@@ -193,7 +193,7 @@ app.MapControllers();
  var defaultCulture = new CultureInfo("fr-MA"); // Use "fr-MA" for MAD (Moroccan Dirham)
 //var defaultCulture = new CultureInfo("ar-EG"); // Use "ar-EG" for EGP (Egyptian Pound)
 
-defaultCulture.NumberFormat.CurrencySymbol = "$"; // Optional: Force a specific symbol if needed
+//defaultCulture.NumberFormat.CurrencySymbol = "$"; // Optional: Force a specific symbol if needed
 
 CultureInfo.DefaultThreadCurrentCulture = defaultCulture;
 CultureInfo.DefaultThreadCurrentUICulture = defaultCulture;
