@@ -1,4 +1,5 @@
-﻿using BakeryPOS.API.Core.Interfaces;
+﻿using BakeryPOS.API.Core.Entities;
+using BakeryPOS.API.Core.Interfaces;
 using BakeryPOS.API.Core.Interfaces;
 using BakeryPOS.API.Data;
 using BakeryPOS.API.DTOs;
@@ -30,17 +31,33 @@ namespace BakeryPOS.API.Controllers
 
         // GET: api/reports
         // Gets a list of all previously generated reports.
+        // GET: api/reports?pageNumber=1&pageSize=10&type=DailySummary&date=2025-11-22
         [HttpGet]
-        public async Task<ActionResult<PagedResponse<ReportListDto>>> GetReports([FromQuery] PaginationParams pagination)
+        public async Task<ActionResult<PagedResponse<ReportListDto>>> GetReports(
+            [FromQuery] PaginationParams pagination,
+            [FromQuery] ReportType? type,  // Filter by Report Type (optional)
+            [FromQuery] DateTime? date)    // Filter by specific Date (optional)
         {
             var query = _context.Reports.AsQueryable();
 
-            // 1. Get Total Count
+            // 1. Apply Type Filter
+            if (type.HasValue)
+            {
+                query = query.Where(r => r.Type == type.Value);
+            }
+
+            // 2. Apply Date Filter (Compare Date part only, ignoring time)
+            if (date.HasValue)
+            {
+                query = query.Where(r => r.GeneratedAt.Date == date.Value.Date);
+            }
+
+            // 3. Get Total Count (after filters)
             var totalRecords = await query.CountAsync();
 
-            // 2. Apply Sorting and Paging
+            // 4. Apply Sorting and Paging
             var reports = await query
-                .OrderByDescending(r => r.GeneratedAt) // Newest reports first
+                .OrderByDescending(r => r.GeneratedAt) // Newest first
                 .Skip((pagination.PageNumber - 1) * pagination.PageSize)
                 .Take(pagination.PageSize)
                 .Select(r => new ReportListDto
@@ -51,7 +68,6 @@ namespace BakeryPOS.API.Controllers
                 })
                 .ToListAsync();
 
-            // 3. Return Paged Response
             return Ok(new PagedResponse<ReportListDto>(reports, pagination.PageNumber, pagination.PageSize, totalRecords));
         }
 
