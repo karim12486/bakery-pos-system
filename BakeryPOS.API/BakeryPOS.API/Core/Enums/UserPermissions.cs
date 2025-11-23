@@ -40,7 +40,7 @@
         // --- Roles ---
 
         // Admin has access to EVERYTHING
-        Admin = ~None,
+        Admin = 255,
 
         // Standard Cashier: Can sell items and manage customers (for credit), but nothing else.
         Cashier = ProcessSales | ManageCustomers
