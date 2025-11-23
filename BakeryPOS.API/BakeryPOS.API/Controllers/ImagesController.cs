@@ -23,7 +23,7 @@ namespace BakeryPOS.API.Controllers
                 return BadRequest(new { message = "Aucun fichier téléchargé." });
             }
 
-            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif" };
+            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
             var extension = Path.GetExtension(file.FileName).ToLower();
             if (!allowedExtensions.Contains(extension))
             {
