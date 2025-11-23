@@ -56,11 +56,11 @@ namespace BakeryPOS.API.Controllers
                 : (user.Permissions.HasFlag(Core.Enums.UserPermissions.Admin) ? "Admin" : "Cashier");
 
             // Convert Enum flags to a list of strings
-            var permissionsList = Enum.GetValues(typeof(Core.Enums.UserPermissions))
-                .Cast<Core.Enums.UserPermissions>()
-                .Where(p => user.Permissions.HasFlag(p) && p != Core.Enums.UserPermissions.None && p != Core.Enums.UserPermissions.Admin)
-                .Select(p => p.ToString())
-                .ToList();
+            //var permissionsList = Enum.GetValues(typeof(Core.Enums.UserPermissions))
+            //    .Cast<Core.Enums.UserPermissions>()
+            //    .Where(p => user.Permissions.HasFlag(p) && p != Core.Enums.UserPermissions.None && p != Core.Enums.UserPermissions.Admin)
+            //    .Select(p => p.ToString())
+            //    .ToList();
 
             // 5. If everything is correct, create and return the UserDto with a token
             var userDto = new UserDto
@@ -69,7 +69,7 @@ namespace BakeryPOS.API.Controllers
                 FullName = user.FullName,
                 Token = _tokenService.CreateToken(user),
                 Role = role,
-                Permissions = permissionsList,
+                Permissions = int.Parse(user.Permissions.ToString()),
                 ImageUrl = user.ImageUrl
             };
 
