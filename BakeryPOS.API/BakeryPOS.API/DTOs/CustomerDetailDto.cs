@@ -15,6 +15,7 @@
         public decimal TotalDiscount { get; set; }
         public decimal OutstandingBalance { get; set; }
         public bool HasPendingPayments { get; set; }
+        public decimal CurrentBalance { get; set; }
 
         // --- NEW ANALYTICS DATA ---
         public List<CustomerMonthlySpendDto> MonthlySpending { get; set; } = new();

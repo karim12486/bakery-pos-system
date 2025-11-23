@@ -63,29 +63,24 @@ namespace BakeryPOS.API.Controllers
         [HttpPost("users")]
         public async Task<IActionResult> CreateUser(UserForCreationDto userForCreationDto)
         {
-            // 1. Check if username already exists (Case insensitive)
             if (await _context.Users.AnyAsync(u => u.Username.ToLower() == userForCreationDto.Username.ToLower()))
             {
-                return BadRequest("Ce nom d'utilisateur est déjà pris."); // "Username is already taken"
+                return BadRequest("Ce nom d'utilisateur est déjà pris.");
             }
 
-            // 2. Map DTO to Entity
-            // (Ensure you have CreateMap<UserForCreationDto, User>() in AutoMapperProfiles)
+            // AutoMapper will now map 'Role' from DTO to Entity automatically
             var newUser = _mapper.Map<Core.Entities.User>(userForCreationDto);
 
-            // 3. Hash the password
             newUser.PasswordHash = _passwordService.HashPassword(userForCreationDto.Password);
-
-            // 4. Set default fields
             newUser.IsActive = true;
             newUser.CreatedAt = DateTime.UtcNow;
 
-            // 5. Save to Database
+            // --- DELETED THE MANUAL ROLE LOGIC HERE --- 
+
             await _context.Users.AddAsync(newUser);
             await _context.SaveChangesAsync();
 
-            // 6. Return success message
-            return StatusCode(201, "Utilisateur créé avec succès."); // "User created successfully"
+            return StatusCode(201, "Utilisateur créé avec succès.");
         }
 
         // GET: api/admin/users/5

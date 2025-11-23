@@ -51,7 +51,9 @@ namespace BakeryPOS.API.Controllers
             }
 
             // Determine Role based on permissions (Simple logic)
-            string role = user.Permissions.HasFlag(Core.Enums.UserPermissions.Admin) ? "Admin" : "Cashier";
+            string role = !string.IsNullOrEmpty(user.Role)
+                ? user.Role
+                : (user.Permissions.HasFlag(Core.Enums.UserPermissions.Admin) ? "Admin" : "Cashier");
 
             // Convert Enum flags to a list of strings
             var permissionsList = Enum.GetValues(typeof(Core.Enums.UserPermissions))

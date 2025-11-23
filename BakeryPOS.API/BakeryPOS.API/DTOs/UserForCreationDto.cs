@@ -20,5 +20,7 @@ namespace BakeryPOS.API.DTOs
         public UserPermissions Permissions { get; set; }
 
         public string? ImageUrl { get; set; } // Added for the new image feature
+
+        public string? Role { get; set; }
     }
 }

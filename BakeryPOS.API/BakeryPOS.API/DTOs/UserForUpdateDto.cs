@@ -7,10 +7,10 @@ namespace BakeryPOS.API.DTOs
     {
         [Required]
         public string FullName { get; set; } = string.Empty;
-
         [Required]
-        public UserPermissions Permissions { get; set; }
-
+        public int Permissions { get; set; }
         public bool IsActive { get; set; }
+        public string? ImageUrl { get; set; }
+        public string? Role { get; set; }
     }
 }

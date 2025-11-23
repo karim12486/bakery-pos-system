@@ -13,5 +13,6 @@ namespace BakeryPOS.API.DTOs
         public decimal DiscountPercentage { get; set; } = 0;
 
         public string? ImageUrl { get; set; }
+        public decimal CurrentBalance { get; set; }
     }
 }
