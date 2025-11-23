@@ -60,7 +60,7 @@ namespace BakeryPOS.API.Mappers
             // --- Expense Mappings ---
             CreateMap<ExpenseCategory, ExpenseCategoryDto>();
             CreateMap<ExpenseCategoryForCreateDto, ExpenseCategory>();
-
+            CreateMap<ExpenseCategoryForUpdateDto, ExpenseCategory>();
             CreateMap<Expense, ExpenseDto>()
                 .ForMember(dest => dest.CategoryName, opt => opt.MapFrom(src => src.Category.Name))
                 .ForMember(dest => dest.RecordedByUserName, opt => opt.MapFrom(src => src.User.FullName));

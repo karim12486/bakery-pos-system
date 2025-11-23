@@ -148,5 +148,51 @@ namespace BakeryPOS.API.Controllers
             await _context.SaveChangesAsync();
             return NoContent();
         }
+
+        // PUT: api/expenses/categories/5
+        [HttpPut("categories/{id}")]
+        public async Task<IActionResult> UpdateCategory(int id, ExpenseCategoryForUpdateDto categoryDto)
+        {
+            var category = await _context.ExpenseCategories.FindAsync(id);
+            if (category == null)
+            {
+                return NotFound("Catégorie introuvable."); // Category not found
+            }
+
+            // Optional: Check for duplicate name
+            if (await _context.ExpenseCategories.AnyAsync(c => c.Id != id && c.Name.ToLower() == categoryDto.Name.ToLower()))
+            {
+                return BadRequest("Une catégorie avec ce nom existe déjà."); // Name already exists
+            }
+
+            _mapper.Map(categoryDto, category);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+        // DELETE: api/expenses/categories/5
+        [HttpDelete("categories/{id}")]
+        public async Task<IActionResult> DeleteCategory(int id)
+        {
+            var category = await _context.ExpenseCategories.FindAsync(id);
+            if (category == null)
+            {
+                return NotFound("Catégorie introuvable.");
+            }
+
+            // Safety Check: Prevent deleting a category if expenses are using it
+            bool isUsed = await _context.Expenses.AnyAsync(e => e.CategoryId == id);
+            if (isUsed)
+            {
+                return BadRequest("Impossible de supprimer cette catégorie car elle est liée à des dépenses existantes.");
+                // "Cannot delete this category because it is linked to existing expenses."
+            }
+
+            _context.ExpenseCategories.Remove(category);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
     }
 }
