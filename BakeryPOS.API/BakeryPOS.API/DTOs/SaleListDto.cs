@@ -9,5 +9,7 @@
         public decimal FinalAmount { get; set; }
         public decimal AmountPaid { get; set; }
         public decimal AmountOwed { get; set; }
+        public decimal CashPaid { get; set; }
+        public decimal CardPaid { get; set; }
     }
 }

@@ -40,18 +40,23 @@ namespace BakeryPOS.API.Services
 
             var paymentStats = new List<PaymentMethodStatsDto>
             {
+                // 1. Total Cash Received (includes pure Cash sales + Split Cash + Credit Deposits)
                 new PaymentMethodStatsDto
                 {
                     MethodName = "Espèces",
                     TransactionCount = salesForDay.Count(s => s.CashPaid > 0),
                     TotalAmount = salesForDay.Sum(s => s.CashPaid)
                 },
+    
+                // 2. Total Card Received (includes pure Card sales + Split Card)
                 new PaymentMethodStatsDto
                 {
                     MethodName = "Carte Bancaire",
                     TransactionCount = salesForDay.Count(s => s.CardPaid > 0),
                     TotalAmount = salesForDay.Sum(s => s.CardPaid)
                 },
+    
+                // 3. New Debt Created (Money we haven't received yet)
                 new PaymentMethodStatsDto
                 {
                     MethodName = "Crédit (Dette)",
@@ -143,18 +148,23 @@ namespace BakeryPOS.API.Services
 
             var paymentStats = new List<PaymentMethodStatsDto>
             {
+                // 1. Total Cash Received (includes pure Cash sales + Split Cash + Credit Deposits)
                 new PaymentMethodStatsDto
                 {
                     MethodName = "Espèces",
                     TransactionCount = salesForMonth.Count(s => s.CashPaid > 0),
                     TotalAmount = salesForMonth.Sum(s => s.CashPaid)
                 },
+    
+                // 2. Total Card Received (includes pure Card sales + Split Card)
                 new PaymentMethodStatsDto
                 {
                     MethodName = "Carte Bancaire",
                     TransactionCount = salesForMonth.Count(s => s.CardPaid > 0),
                     TotalAmount = salesForMonth.Sum(s => s.CardPaid)
                 },
+    
+                // 3. New Debt Created (Money we haven't received yet)
                 new PaymentMethodStatsDto
                 {
                     MethodName = "Crédit (Dette)",

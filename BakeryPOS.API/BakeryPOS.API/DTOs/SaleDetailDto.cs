@@ -14,6 +14,8 @@
         public string PaymentMethod { get; set; } = string.Empty;
         public decimal AmountPaid { get; set; }
         public decimal AmountOwed { get; set; }
+        public decimal CashPaid { get; set; }
+        public decimal CardPaid { get; set; }
 
         public List<SaleItemDto> Items { get; set; } = new List<SaleItemDto>();
     }
