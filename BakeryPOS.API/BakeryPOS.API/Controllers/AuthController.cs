@@ -69,7 +69,7 @@ namespace BakeryPOS.API.Controllers
                 FullName = user.FullName,
                 Token = _tokenService.CreateToken(user),
                 Role = role,
-                Permissions = int.Parse(user.Permissions.ToString()),
+                Permissions = (int)user.Permissions,
                 ImageUrl = user.ImageUrl
             };
 
