@@ -35,5 +35,11 @@ namespace BakeryPOS.API.Core.Entities
 
         // Navigation property for all the items in this sale
         public ICollection<SaleDetail> SaleDetails { get; set; } = new List<SaleDetail>();
+
+        [Column(TypeName = "decimal(18, 2)")]
+        public decimal CashPaid { get; set; } = 0;
+
+        [Column(TypeName = "decimal(18, 2)")]
+        public decimal CardPaid { get; set; } = 0;
     }
 }

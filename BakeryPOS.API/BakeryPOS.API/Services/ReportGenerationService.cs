@@ -38,15 +38,27 @@ namespace BakeryPOS.API.Services
                 })
                 .ToList();
 
-            var paymentStats = salesForDay
-                .GroupBy(s => s.PaymentMethod)
-                .Select(g => new PaymentMethodStatsDto
+            var paymentStats = new List<PaymentMethodStatsDto>
+            {
+                new PaymentMethodStatsDto
                 {
-                    MethodName = g.Key.ToString(),
-                    TransactionCount = g.Count(),
-                    TotalAmount = g.Sum(s => s.FinalAmount) // Or TotalAmount - DiscountAmount
-                })
-                .ToList();
+                    MethodName = "Espèces",
+                    TransactionCount = salesForDay.Count(s => s.CashPaid > 0),
+                    TotalAmount = salesForDay.Sum(s => s.CashPaid)
+                },
+                new PaymentMethodStatsDto
+                {
+                    MethodName = "Carte Bancaire",
+                    TransactionCount = salesForDay.Count(s => s.CardPaid > 0),
+                    TotalAmount = salesForDay.Sum(s => s.CardPaid)
+                },
+                new PaymentMethodStatsDto
+                {
+                    MethodName = "Crédit (Dette)",
+                    TransactionCount = salesForDay.Count(s => s.AmountOwed > 0),
+                    TotalAmount = salesForDay.Sum(s => s.AmountOwed)
+                }
+            };
 
             var report = new DailySalesReportDto
             {
@@ -129,15 +141,27 @@ namespace BakeryPOS.API.Services
                 .OrderBy(d => d.Day)
                 .ToList();
 
-            var paymentStats = salesForMonth
-                .GroupBy(s => s.PaymentMethod)
-                .Select(g => new PaymentMethodStatsDto
+            var paymentStats = new List<PaymentMethodStatsDto>
+            {
+                new PaymentMethodStatsDto
                 {
-                    MethodName = g.Key.ToString(),
-                    TransactionCount = g.Count(),
-                    TotalAmount = g.Sum(s => s.TotalAmount - s.DiscountAmount)
-                })
-                .ToList();
+                    MethodName = "Espèces",
+                    TransactionCount = salesForMonth.Count(s => s.CashPaid > 0),
+                    TotalAmount = salesForMonth.Sum(s => s.CashPaid)
+                },
+                new PaymentMethodStatsDto
+                {
+                    MethodName = "Carte Bancaire",
+                    TransactionCount = salesForMonth.Count(s => s.CardPaid > 0),
+                    TotalAmount = salesForMonth.Sum(s => s.CardPaid)
+                },
+                new PaymentMethodStatsDto
+                {
+                    MethodName = "Crédit (Dette)",
+                    TransactionCount = salesForMonth.Count(s => s.AmountOwed > 0),
+                    TotalAmount = salesForMonth.Sum(s => s.AmountOwed)
+                }
+            };
 
             // Assemble the final report object with our recalculated totals
             var report = new MonthlySalesReportDto

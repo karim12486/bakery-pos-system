@@ -23,5 +23,8 @@ namespace BakeryPOS.API.DTOs
         // The ID of the premium customer, if any
         public int? CustomerId { get; set; }
 
+        public decimal? SplitCashAmount { get; set; }
+        public decimal? SplitCardAmount { get; set; }
+
     }
 }

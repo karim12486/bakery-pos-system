@@ -4,6 +4,7 @@
     {
         Cash,
         Card,
-        Credit // The customer is paying later
+        Credit, // The customer is paying later
+        Split // Combination of multiple payment types
     }
 }
