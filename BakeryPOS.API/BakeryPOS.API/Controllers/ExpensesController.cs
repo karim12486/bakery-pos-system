@@ -194,5 +194,32 @@ namespace BakeryPOS.API.Controllers
 
             return NoContent();
         }
+
+        // GET: api/expenses/summary
+        // Returns total expenses and count for the current month
+        [HttpGet("summary")]
+        public async Task<ActionResult<ExpenseSummaryDto>> GetMonthlySummary()
+        {
+            var now = DateTime.UtcNow;
+            var startOfMonth = new DateTime(now.Year, now.Month, 1);
+            var startOfNextMonth = startOfMonth.AddMonths(1);
+
+            // Base query for this month's expenses
+            var query = _context.Expenses
+                .Where(e => e.Date >= startOfMonth && e.Date < startOfNextMonth);
+
+            // Execute aggregates in the database
+            var totalAmount = await query.SumAsync(e => e.Amount);
+            var count = await query.CountAsync();
+
+            var summary = new ExpenseSummaryDto
+            {
+                TotalAmount = totalAmount,
+                TransactionCount = count,
+                Period = startOfMonth.ToString("MMMM yyyy") // e.g. "November 2025"
+            };
+
+            return Ok(summary);
+        }
     }
 }
