@@ -25,6 +25,9 @@ namespace BakeryPOS.API.Core.Entities
         [Column(TypeName = "decimal(18, 2)")]
         public decimal AmountOwed { get; set; } // TotalAmount - AmountPaid
 
+        [Column(TypeName = "decimal(18, 2)")]
+        public decimal ChangeGiven { get; set; } = 0;
+
         // Foreign Key to Customer (optional)
         public int? CustomerId { get; set; } // Nullable, as not every sale is for a premium customer
         public Customer? Customer { get; set; }
