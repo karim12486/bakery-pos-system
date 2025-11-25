@@ -103,18 +103,20 @@ namespace BakeryPOS.API.Controllers
             if (user == null) return Unauthorized();
 
             var newExpense = _mapper.Map<Expense>(expenseDto);
+
+            // Override any incoming date: always use current UTC timestamp
+            newExpense.Date = DateTime.UtcNow;
             newExpense.UserId = user.Id;
 
             await _context.Expenses.AddAsync(newExpense);
             await _context.SaveChangesAsync();
 
-            // Reload the expense with includes to map it back to a full DTO
             var expenseToReturn = await _context.Expenses
                 .Include(e => e.Category)
                 .Include(e => e.User)
                 .FirstOrDefaultAsync(e => e.Id == newExpense.Id);
 
-            return Ok(_mapper.Map<ExpenseDto>(expenseToReturn));
+                return Ok(_mapper.Map<ExpenseDto>(expenseToReturn));
         }
 
         // PUT: api/Expenses/5
@@ -131,7 +133,10 @@ namespace BakeryPOS.API.Controllers
                 return BadRequest($"La catégorie de dépenses portant l'identifiant {expenseDto.CategoryId} n'existe pas.");
             }
 
+            // If you also want to prevent date edits, remove mapping of Date in AutoMapper or override:
             _mapper.Map(expenseDto, expenseFromDb);
+            // expenseFromDb.Date = expenseFromDb.Date; // keep existing date (optional explicitness)
+
             await _context.SaveChangesAsync();
             return NoContent();
         }
