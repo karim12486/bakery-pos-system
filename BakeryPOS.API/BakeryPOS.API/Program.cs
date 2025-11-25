@@ -133,6 +133,7 @@ builder.Services.AddAutoMapper(cfg =>
  cfg.AddMaps(typeof(AutoMapperProfiles).Assembly);
 });
 
+builder.Services.AddHostedService<DatabaseBackupService>();
 
 builder.Services.AddHostedService<ScheduledReportService>();
 
