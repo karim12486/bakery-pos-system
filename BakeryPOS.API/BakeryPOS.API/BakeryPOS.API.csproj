@@ -13,10 +13,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="appsettings.development.json" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="Anthropic" Version="3.7.0" />
     <PackageReference Include="AutoMapper" Version="15.1.0" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
