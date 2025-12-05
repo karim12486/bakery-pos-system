@@ -86,6 +86,16 @@ namespace BakeryPOS.API.Controllers
             {
                 return BadRequest($"Category with ID {productForCreateDto.CategoryId} does not exist.");
             }
+            if (!string.IsNullOrEmpty(productForCreateDto.Barcode))
+            {
+                bool barcodeExists = await _context.Products
+                    .AnyAsync(p => p.IsActive && p.Barcode == productForCreateDto.Barcode);
+
+                if (barcodeExists)
+                {
+                    return BadRequest($"Le code-barres '{productForCreateDto.Barcode}' est déjà utilisé par un autre produit.");
+                }
+            }
             // 6. USE AUTOMAPPER TO MAP FROM DTO TO ENTITY
             var newProduct = _mapper.Map<Product>(productForCreateDto);
 
@@ -117,6 +127,18 @@ namespace BakeryPOS.API.Controllers
             if (!categoryExists)
             {
                 return BadRequest($"Category with ID {productForUpdateDto.CategoryId} does not exist.");
+            }
+
+            if (!string.IsNullOrEmpty(productForUpdateDto.Barcode))
+            {
+                // Check if ANY OTHER product (not this one) has the same barcode
+                bool barcodeExists = await _context.Products
+                    .AnyAsync(p => p.IsActive && p.Id != id && p.Barcode == productForUpdateDto.Barcode);
+
+                if (barcodeExists)
+                {
+                    return BadRequest($"Le code-barres '{productForUpdateDto.Barcode}' est déjà utilisé par un autre produit.");
+                }
             }
 
             // 7. USE AUTOMAPPER TO MAP UPDATES FROM DTO TO THE EXISTING ENTITY
