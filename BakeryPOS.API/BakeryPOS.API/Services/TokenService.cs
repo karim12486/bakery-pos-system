@@ -1,4 +1,4 @@
-﻿using BakeryPOS.API.Core.Entities;
+using BakeryPOS.API.Core.Entities;
 using BakeryPOS.API.Core.Interfaces;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -10,39 +10,49 @@ namespace BakeryPOS.API.Services
     public class TokenService : ITokenService
     {
         private readonly SymmetricSecurityKey _key;
+        private readonly string _issuer;
+        private readonly string _audience;
+        private readonly int _lifetimeHours;
 
         public TokenService(IConfiguration config)
         {
-            _key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["AppSettings:TokenKey"]));
+            var tokenKey = config["AppSettings:TokenKey"];
+            if (string.IsNullOrWhiteSpace(tokenKey))
+            {
+                throw new InvalidOperationException("AppSettings:TokenKey is not configured.");
+            }
+            _key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenKey));
+            _issuer = config["AppSettings:TokenIssuer"] ?? "BakeryPOS.API";
+            _audience = config["AppSettings:TokenAudience"] ?? "BakeryPOS.Client";
+            _lifetimeHours = config.GetValue<int?>("AppSettings:TokenLifetimeHours") ?? 12;
         }
 
         public string CreateToken(User user)
         {
-            // 1. Create the claims (the information you want in the token)
+            // NameId stays as the username for backwards-compat with controllers
+            // that read ClaimTypes.NameIdentifier. uid carries the numeric user id.
             var claims = new List<Claim>
             {
-                new Claim(JwtRegisteredClaimNames.NameId, user.Username)
-                // You can add more claims here, like user.Id, roles, etc.
+                new Claim(JwtRegisteredClaimNames.NameId, user.Username),
+                new Claim("uid", user.Id.ToString()),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };
 
-            // 2. Create the signing credentials using the secret key and a security algorithm
             var creds = new SigningCredentials(_key, SecurityAlgorithms.HmacSha512Signature);
 
-            // 3. Describe the token: who it's for, what claims it has, when it expires, and what credentials were used to sign it
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(claims),
-                Expires = DateTime.Now.AddHours(12), // Token is valid for 12 hours
-                SigningCredentials = creds
+                IssuedAt = DateTime.UtcNow,
+                NotBefore = DateTime.UtcNow,
+                Expires = DateTime.UtcNow.AddHours(_lifetimeHours),
+                SigningCredentials = creds,
+                Issuer = _issuer,
+                Audience = _audience
             };
 
-            // 4. Create the token handler that will actually create the token
             var tokenHandler = new JwtSecurityTokenHandler();
-
-            // 5. Create the token
             var token = tokenHandler.CreateToken(tokenDescriptor);
-
-            // 6. Write the token into the string format that we can send to the client
             return tokenHandler.WriteToken(token);
         }
     }

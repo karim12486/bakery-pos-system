@@ -1,4 +1,4 @@
-﻿using BakeryPOS.API.Core.Enums;
+using BakeryPOS.API.Core.Enums;
 using System.ComponentModel.DataAnnotations;
 
 namespace BakeryPOS.API.DTOs
@@ -10,7 +10,10 @@ namespace BakeryPOS.API.DTOs
         public string Username { get; set; } = string.Empty;
 
         [Required]
-        [StringLength(100, MinimumLength = 6, ErrorMessage = "Le mot de passe doit comporter au moins 6 caractères.")]
+        [StringLength(100, MinimumLength = 8, ErrorMessage = "Le mot de passe doit comporter au moins 8 caractères.")]
+        [RegularExpression(
+            @"^(?=.*[A-Za-z])(?=.*\d).{8,100}$",
+            ErrorMessage = "Le mot de passe doit contenir au moins une lettre et un chiffre.")]
         public string Password { get; set; } = string.Empty;
 
         [Required]
@@ -19,7 +22,7 @@ namespace BakeryPOS.API.DTOs
         [Required]
         public UserPermissions Permissions { get; set; }
 
-        public string? ImageUrl { get; set; } // Added for the new image feature
+        public string? ImageUrl { get; set; }
 
         public string? Role { get; set; }
     }

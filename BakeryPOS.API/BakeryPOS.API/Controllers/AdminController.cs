@@ -110,11 +110,44 @@ namespace BakeryPOS.API.Controllers
                 return NotFound();
             }
 
-            // Use AutoMapper to update the user entity from the DTO
+            var currentUsername = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var isSelf = userFromDb.Username.Equals(currentUsername, StringComparison.OrdinalIgnoreCase);
+            var newPermissions = (UserPermissions)userForUpdateDto.Permissions;
+
+            if (isSelf)
+            {
+                if (!userForUpdateDto.IsActive)
+                {
+                    return BadRequest("Vous ne pouvez pas désactiver votre propre compte.");
+                }
+                if (!newPermissions.HasFlag(UserPermissions.ManageUsers))
+                {
+                    return BadRequest("Vous ne pouvez pas retirer votre propre permission de gestion des utilisateurs.");
+                }
+            }
+
+            // If this user currently has ManageUsers and the change would remove it (or deactivate them),
+            // make sure at least one other active user keeps ManageUsers.
+            var losingManageUsers = userFromDb.Permissions.HasFlag(UserPermissions.ManageUsers)
+                && (!newPermissions.HasFlag(UserPermissions.ManageUsers) || !userForUpdateDto.IsActive);
+
+            if (losingManageUsers)
+            {
+                var otherManagers = await _context.Users.CountAsync(u =>
+                    u.Id != userFromDb.Id
+                    && u.IsActive
+                    && (u.Permissions & UserPermissions.ManageUsers) == UserPermissions.ManageUsers);
+
+                if (otherManagers == 0)
+                {
+                    return BadRequest("Au moins un utilisateur actif doit conserver la permission de gestion des utilisateurs.");
+                }
+            }
+
             _mapper.Map(userForUpdateDto, userFromDb);
 
             await _context.SaveChangesAsync();
-            return NoContent(); // Standard response for a successful update
+            return NoContent();
         }
 
         // DELETE: api/admin/users/5
