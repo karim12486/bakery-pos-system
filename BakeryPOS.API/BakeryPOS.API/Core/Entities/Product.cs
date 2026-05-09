@@ -20,7 +20,8 @@ namespace BakeryPOS.API.Core.Entities
         public int CategoryId { get; set; }
         public Category Category { get; set; }
 
-        public int StockQuantity { get; set; }
+        [Column(TypeName = "decimal(18, 3)")]
+        public decimal StockQuantity { get; set; }
         public string? ImageUrl { get; set; } // Optional image for the POS display
         public bool IsActive { get; set; } = true;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

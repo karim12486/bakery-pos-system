@@ -26,7 +26,7 @@ namespace BakeryPOS.API.DTOs
 
         [Required]
         [Range(0, 100000, ErrorMessage = "Stock must be a non-negative number.")]
-        public int StockQuantity { get; set; }
+        public decimal StockQuantity { get; set; }
 
         public string? ImageUrl { get; set; }
         [Required]

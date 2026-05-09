@@ -1,4 +1,6 @@
-﻿namespace BakeryPOS.API.Core.Entities
+﻿using System.ComponentModel.DataAnnotations.Schema;
+
+namespace BakeryPOS.API.Core.Entities
 {
     public enum StockMovementType
     {
@@ -13,7 +15,8 @@
         public int Id { get; set; }
         public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 
-        public int QuantityChange { get; set; } // Can be positive (addition) or negative (removal)
+        [Column(TypeName = "decimal(18, 3)")]
+        public decimal QuantityChange { get; set; } // Can be positive (addition) or negative (removal)
 
         public StockMovementType Type { get; set; }
 

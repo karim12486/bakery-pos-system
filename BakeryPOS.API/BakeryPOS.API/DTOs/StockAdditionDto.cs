@@ -8,7 +8,7 @@ namespace BakeryPOS.API.DTOs
         public int ProductId { get; set; }
 
         [Required]
-        [Range(1, 10000, ErrorMessage = "Quantity to add must be at least 1.")]
-        public int QuantityToAdd { get; set; }
+        [Range(0.001, 100000, ErrorMessage = "Quantity must be greater than 1 gram")]
+        public decimal QuantityToAdd { get; set; }
     }
 }

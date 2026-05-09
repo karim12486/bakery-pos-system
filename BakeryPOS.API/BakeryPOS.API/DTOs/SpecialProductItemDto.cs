@@ -3,8 +3,8 @@
     public class SpecialProductItemDto
     {
         public string ProductName { get; set; } = string.Empty;
-        public int QuantityAdded { get; set; }
-        public int QuantitySold { get; set; }
+        public decimal QuantityAdded { get; set; }
+        public decimal QuantitySold { get; set; }
         public decimal TotalRevenue { get; set; }
         public decimal TotalCost { get; set; }
         public decimal Profit { get; set; }

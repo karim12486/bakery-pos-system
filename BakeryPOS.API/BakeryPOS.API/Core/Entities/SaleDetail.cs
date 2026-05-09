@@ -5,7 +5,8 @@ namespace BakeryPOS.API.Core.Entities
     public class SaleDetail
     {
         public int Id { get; set; }
-        public int Quantity { get; set; }
+        [Column(TypeName = "decimal(18, 3)")]
+        public decimal Quantity { get; set; }
 
         [Column(TypeName = "decimal(18, 2)")]
         public decimal UnitPrice { get; set; } // The price of the product at the time of sale
