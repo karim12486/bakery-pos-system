@@ -19,9 +19,19 @@ public static class ApplicationServicesExtensions
         services.AddScoped<IPdfGenerationService, PdfGenerationService>();
         services.AddScoped<INotificationService, TelegramNotificationService>();
 
-        // Per-feature application services. Pattern that the rest of the controllers
-        // will migrate to in PR-2b. Today only Sales is extracted as the showcase
-        // (transaction wrapping + idempotency + DomainException).
+        // Per-feature application services. Controllers are thin shells that bind →
+        // delegate to these. Each service centralises validation, transaction wrapping,
+        // and DomainException throws for its feature.
+        //
+        // NOT extracted (intentional): Categories, Images, Inventory, Reports, Removal,
+        // Dashboard — all thin CRUD/read paths where direct EF in the controller is
+        // simpler and EF Core global query filters will handle multi-tenancy at the
+        // DbContext level when that lands.
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IAdminService, AdminService>();
+        services.AddScoped<IProductService, ProductService>();
+        services.AddScoped<ICustomerService, CustomerService>();
+        services.AddScoped<IExpenseService, ExpenseService>();
         services.AddScoped<ISalesService, SalesService>();
         services.AddScoped<IIdempotencyService, IdempotencyService>();
 
