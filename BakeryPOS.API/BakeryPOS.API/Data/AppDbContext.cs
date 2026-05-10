@@ -22,16 +22,14 @@ namespace BakeryPOS.API.Data
         public DbSet<Expense> Expenses { get; set; }
         public DbSet<ExpenseCategory> ExpenseCategories { get; set; }
         public DbSet<RemovalRequest> RemovalRequests { get; set; }
-
-        // We will add other DbSet properties here later for Products, Sales, etc.
+        public DbSet<IdempotencyRecord> IdempotencyRecords { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
-            // This line ensures the StockMovementType enum is stored as a string in the DB (e.g., "Sale", "Addition")
-            // This makes the database much more readable than storing it as a number (0, 1, 2...).
+            // Store enum as string for readability in the DB.
             modelBuilder.Entity<StockMovement>()
                 .Property(s => s.Type)
                 .HasConversion<string>();
@@ -47,6 +45,16 @@ namespace BakeryPOS.API.Data
             modelBuilder.Entity<RemovalRequest>()
                 .Property(r => r.Status)
                 .HasConversion<string>();
+
+            // Idempotency keys are unique per (endpoint, key). Once tenancy lands, add TenantId
+            // to this composite index.
+            modelBuilder.Entity<IdempotencyRecord>(e =>
+            {
+                e.Property(x => x.Key).HasMaxLength(80).IsRequired();
+                e.Property(x => x.Endpoint).HasMaxLength(120).IsRequired();
+                e.Property(x => x.ResponseBody).HasColumnType("nvarchar(max)");
+                e.HasIndex(x => new { x.Endpoint, x.Key }).IsUnique();
+            });
         }
     }
 }

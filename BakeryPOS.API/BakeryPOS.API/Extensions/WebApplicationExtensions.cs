@@ -1,4 +1,5 @@
 using System.Globalization;
+using BakeryPOS.API.Common.Errors;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
@@ -13,6 +14,10 @@ public static class WebApplicationExtensions
     /// </summary>
     public static WebApplication UseBakeryPosPipeline(this WebApplication app)
     {
+        // Exception → ProblemDetails (RFC 7807) translation must run BEFORE anything that can throw
+        // downstream — including auth, controllers, and FluentValidation in services.
+        app.UseMiddleware<ProblemDetailsMiddleware>();
+
         // Swagger is enabled in production too, by design — the operator uses it to seed data
         // on the client's PC. Re-evaluate when self-serve onboarding lands.
         app.UseSwagger();

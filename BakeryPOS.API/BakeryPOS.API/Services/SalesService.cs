@@ -1,0 +1,232 @@
+using AutoMapper;
+using BakeryPOS.API.Common.Errors;
+using BakeryPOS.API.Core.Entities;
+using BakeryPOS.API.Core.Enums;
+using BakeryPOS.API.Data;
+using BakeryPOS.API.DTOs;
+using BakeryPOS.API.DTOs.Shared;
+using FluentValidation;
+using Microsoft.EntityFrameworkCore;
+
+namespace BakeryPOS.API.Services;
+
+/// <summary>
+/// All Sales business logic lives here. Controller is a thin shell that binds + delegates.
+/// Pattern that the rest of the controllers will migrate to in PR-2b.
+/// </summary>
+public interface ISalesService
+{
+    Task<PagedResponse<SaleListDto>> ListAsync(PaginationParams pagination, DateTime? startDate, DateTime? endDate, CancellationToken ct);
+    Task<SaleDetailDto?> GetAsync(int id, CancellationToken ct);
+    Task<SaleCreatedDto> CreateAsync(SaleForCreateDto dto, string username, CancellationToken ct);
+}
+
+public sealed class SalesService : ISalesService
+{
+    private readonly AppDbContext _context;
+    private readonly IMapper _mapper;
+    private readonly IValidator<SaleForCreateDto> _createValidator;
+
+    public SalesService(AppDbContext context, IMapper mapper, IValidator<SaleForCreateDto> createValidator)
+    {
+        _context = context;
+        _mapper = mapper;
+        _createValidator = createValidator;
+    }
+
+    public async Task<PagedResponse<SaleListDto>> ListAsync(
+        PaginationParams pagination, DateTime? startDate, DateTime? endDate, CancellationToken ct)
+    {
+        var query = _context.Sales.AsQueryable();
+
+        if (startDate.HasValue)
+            query = query.Where(s => s.SaleDate >= startDate.Value);
+
+        if (endDate.HasValue)
+        {
+            var effectiveEndDate = endDate.Value;
+            if (effectiveEndDate.TimeOfDay == TimeSpan.Zero)
+                effectiveEndDate = effectiveEndDate.Date.AddDays(1);
+            query = query.Where(s => s.SaleDate < effectiveEndDate);
+        }
+
+        var totalRecords = await query.CountAsync(ct);
+
+        var sales = await query
+            .Include(s => s.User)
+            .Include(s => s.Customer)
+            .OrderByDescending(s => s.SaleDate)
+            .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+            .Take(pagination.PageSize)
+            .ToListAsync(ct);
+
+        var dtos = _mapper.Map<IEnumerable<SaleListDto>>(sales);
+        return new PagedResponse<SaleListDto>(dtos, pagination.PageNumber, pagination.PageSize, totalRecords);
+    }
+
+    public async Task<SaleDetailDto?> GetAsync(int id, CancellationToken ct)
+    {
+        var sale = await _context.Sales
+            .Include(s => s.User)
+            .Include(s => s.Customer)
+            .Include(s => s.SaleDetails).ThenInclude(sd => sd.Product)
+            .FirstOrDefaultAsync(s => s.Id == id, ct);
+
+        return sale == null ? null : _mapper.Map<SaleDetailDto>(sale);
+    }
+
+    public async Task<SaleCreatedDto> CreateAsync(SaleForCreateDto dto, string username, CancellationToken ct)
+    {
+        // Shape validation. ValidationException bubbles up to ProblemDetailsMiddleware → 422.
+        await _createValidator.ValidateAndThrowAsync(dto, ct);
+
+        var cashier = await _context.Users.SingleOrDefaultAsync(u => u.Username == username, ct)
+            ?? throw new DomainException("ERR_CASHIER_NOT_FOUND", "Caissier introuvable.", StatusCodes.Status401Unauthorized);
+
+        // Load all referenced products in one query.
+        var productIds = dto.SaleDetails.Select(d => d.ProductId).Distinct().ToList();
+        var products = await _context.Products
+            .Where(p => productIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, ct);
+
+        decimal totalAmount = 0;
+        foreach (var item in dto.SaleDetails)
+        {
+            if (!products.TryGetValue(item.ProductId, out var product))
+                throw new DomainException("ERR_PRODUCT_NOT_FOUND", $"Produit avec l'ID {item.ProductId} introuvable.");
+            totalAmount += product.Price * item.Quantity;
+        }
+
+        // Customer + discount.
+        decimal discountAmount = 0;
+        Customer? customer = null;
+        if (dto.CustomerId.HasValue)
+        {
+            customer = await _context.Customers.FindAsync(new object?[] { dto.CustomerId.Value }, ct)
+                ?? throw new DomainException("ERR_CUSTOMER_NOT_FOUND", "Client introuvable.");
+            if (customer.DiscountPercentage > 0)
+                discountAmount = totalAmount * (customer.DiscountPercentage / 100);
+        }
+        var finalAmount = totalAmount - discountAmount;
+
+        // Payment math (preserved from original controller).
+        var (cashPaid, cardPaid, totalPaidNow, changeGiven) = SplitPayment(dto, finalAmount);
+        var amountOwed = finalAmount - totalPaidNow;
+
+        // Owed money requires a customer to record the debt against.
+        if (amountOwed > 0.001m && customer == null)
+            throw new DomainException(
+                "ERR_CUSTOMER_REQUIRED_FOR_DEBT",
+                $"Paiement incomplet. Il reste {amountOwed:C} à payer. Un client doit être sélectionné pour enregistrer la dette.");
+
+        // Wrap the multi-write in a transaction so partial failure = full rollback.
+        using var tx = await _context.Database.BeginTransactionAsync(ct);
+
+        if (amountOwed > 0.001m && customer != null)
+            customer.CurrentBalance -= amountOwed;
+
+        var newSale = new Sale
+        {
+            UserId = cashier.Id,
+            SaleDate = DateTime.UtcNow,
+            TotalAmount = totalAmount,
+            DiscountAmount = discountAmount,
+            FinalAmount = finalAmount,
+            PaymentMethod = dto.PaymentMethod,
+            AmountPaid = totalPaidNow,
+            AmountOwed = amountOwed,
+            ChangeGiven = changeGiven,
+            CustomerId = dto.CustomerId,
+            CashPaid = cashPaid,
+            CardPaid = cardPaid
+        };
+        await _context.Sales.AddAsync(newSale, ct);
+
+        // Stock decrement + ledger entries.
+        foreach (var item in dto.SaleDetails)
+        {
+            var product = products[item.ProductId];
+            if (product.StockQuantity < item.Quantity)
+                throw new DomainConflictException("ERR_INSUFFICIENT_STOCK", $"Stock insuffisant pour {product.Name}.");
+
+            product.StockQuantity -= item.Quantity;
+            await _context.SaleDetails.AddAsync(new SaleDetail
+            {
+                ProductId = product.Id,
+                Quantity = item.Quantity,
+                UnitPrice = product.Price,
+                Sale = newSale
+            }, ct);
+            await _context.StockMovements.AddAsync(new StockMovement
+            {
+                ProductId = product.Id,
+                UserId = cashier.Id,
+                QuantityChange = -item.Quantity,
+                Type = StockMovementType.Sale
+            }, ct);
+        }
+
+        await _context.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
+        return new SaleCreatedDto(newSale.Id, changeGiven);
+    }
+
+    private static (decimal cashPaid, decimal cardPaid, decimal totalPaidNow, decimal changeGiven)
+        SplitPayment(SaleForCreateDto dto, decimal finalAmount)
+    {
+        decimal cashPaid = 0, cardPaid = 0, totalPaidNow = 0, changeGiven = 0;
+
+        switch (dto.PaymentMethod)
+        {
+            case PaymentType.Cash:
+            {
+                var tendered = dto.AmountPaid > 0 ? dto.AmountPaid : finalAmount;
+                if (tendered >= finalAmount)
+                {
+                    totalPaidNow = finalAmount;
+                    cashPaid = finalAmount;
+                    changeGiven = tendered - finalAmount;
+                }
+                else
+                {
+                    totalPaidNow = tendered;
+                    cashPaid = tendered;
+                }
+                break;
+            }
+            case PaymentType.Card:
+            {
+                var tendered = dto.AmountPaid > 0 ? dto.AmountPaid : finalAmount;
+                if (tendered > finalAmount) tendered = finalAmount; // card can't give change
+                totalPaidNow = tendered;
+                cardPaid = tendered;
+                break;
+            }
+            case PaymentType.Split:
+            {
+                cashPaid = dto.SplitCashAmount ?? 0;
+                cardPaid = dto.SplitCardAmount ?? 0;
+                totalPaidNow = cashPaid + cardPaid;
+                if (totalPaidNow > finalAmount)
+                {
+                    changeGiven = totalPaidNow - finalAmount;
+                    totalPaidNow = finalAmount;
+                    cashPaid -= changeGiven;
+                }
+                break;
+            }
+            case PaymentType.Credit:
+            {
+                // Treat any AmountPaid as a cash deposit; remainder goes onto the customer's tab.
+                cashPaid = dto.AmountPaid;
+                totalPaidNow = cashPaid;
+                break;
+            }
+        }
+        return (cashPaid, cardPaid, totalPaidNow, changeGiven);
+    }
+}
+
+/// <summary>Returned to the client on a successful sale.</summary>
+public sealed record SaleCreatedDto(int SaleId, decimal Change);

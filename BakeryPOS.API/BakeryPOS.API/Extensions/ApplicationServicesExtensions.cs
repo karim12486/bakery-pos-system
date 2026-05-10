@@ -1,3 +1,4 @@
+using BakeryPOS.API.Common.Idempotency;
 using BakeryPOS.API.Core.Interfaces;
 using BakeryPOS.API.Services;
 
@@ -17,6 +18,12 @@ public static class ApplicationServicesExtensions
         services.AddScoped<IReportGenerationService, ReportGenerationService>();
         services.AddScoped<IPdfGenerationService, PdfGenerationService>();
         services.AddScoped<INotificationService, TelegramNotificationService>();
+
+        // Per-feature application services. Pattern that the rest of the controllers
+        // will migrate to in PR-2b. Today only Sales is extracted as the showcase
+        // (transaction wrapping + idempotency + DomainException).
+        services.AddScoped<ISalesService, SalesService>();
+        services.AddScoped<IIdempotencyService, IdempotencyService>();
 
         // Outbound HTTP (used by the Telegram notifier; pooled by the framework)
         services.AddHttpClient();

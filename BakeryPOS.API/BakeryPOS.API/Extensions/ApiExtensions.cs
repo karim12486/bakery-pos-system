@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using FluentValidation;
 using Microsoft.OpenApi.Models;
 
 namespace BakeryPOS.API.Extensions;
@@ -51,6 +52,11 @@ public static class ApiExtensions
                 options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
             });
         services.AddEndpointsApiExplorer();
+
+        // FluentValidation — automatically discovers all AbstractValidator<T> in this assembly.
+        // ValidationException thrown by manual validation calls (or by FluentValidation auto-validation
+        // if enabled later) is caught by ProblemDetailsMiddleware and returned as RFC 7807.
+        services.AddValidatorsFromAssemblyContaining<Program>();
 
         services.AddSwaggerGen(options =>
         {
