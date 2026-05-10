@@ -1,3 +1,4 @@
+using BakeryPOS.API.Common.Tenancy;
 using BakeryPOS.API.Core.Interfaces;
 using BakeryPOS.API.Data;
 using BakeryPOS.API.Data.Seed;
@@ -25,6 +26,11 @@ public static class PersistenceExtensions
         {
             cfg.AddMaps(typeof(AutoMapperProfiles).Assembly);
         });
+
+        // Tenancy. ICurrentTenant is request-scoped and reads tenant_id from the JWT claim
+        // (CurrentTenant implementation); EF global query filters in AppDbContext depend on it.
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentTenant, CurrentTenant>();
 
         return services;
     }

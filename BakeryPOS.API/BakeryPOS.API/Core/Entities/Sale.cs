@@ -6,6 +6,8 @@ namespace BakeryPOS.API.Core.Entities
     public class Sale
     {
         public int Id { get; set; }
+        public int TenantId { get; set; }
+        public int? BranchId { get; set; }
         public DateTime SaleDate { get; set; } = DateTime.UtcNow;
 
         [Column(TypeName = "decimal(18, 2)")]

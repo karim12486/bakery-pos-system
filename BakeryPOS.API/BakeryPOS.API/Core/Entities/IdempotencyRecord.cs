@@ -8,6 +8,7 @@ namespace BakeryPOS.API.Core.Entities;
 public class IdempotencyRecord
 {
     public int Id { get; set; }
+    public int TenantId { get; set; }
 
     /// <summary>Client-generated key (typically a UUID). Unique per tenant once tenancy lands.</summary>
     public string Key { get; set; } = string.Empty;

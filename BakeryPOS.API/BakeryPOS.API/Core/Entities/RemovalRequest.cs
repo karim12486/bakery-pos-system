@@ -12,6 +12,8 @@ namespace BakeryPOS.API.Core.Entities
     public class RemovalRequest
     {
         public int Id { get; set; }
+        public int TenantId { get; set; }
+        public int? BranchId { get; set; }
         public DateTime RequestTime { get; set; } = DateTime.UtcNow;
 
         // What is being requested for removal?

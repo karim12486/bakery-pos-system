@@ -5,6 +5,7 @@ namespace BakeryPOS.API.Core.Entities
     public class Product
     {
         public int Id { get; set; }
+        public int TenantId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
         public string? Barcode { get; set; } // Barcode can be optional

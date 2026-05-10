@@ -11,6 +11,8 @@
     public class StockMovement
     {
         public int Id { get; set; }
+        public int TenantId { get; set; }
+        public int? BranchId { get; set; }
         public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 
         public int QuantityChange { get; set; } // Can be positive (addition) or negative (removal)

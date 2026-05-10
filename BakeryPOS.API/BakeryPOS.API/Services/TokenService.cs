@@ -31,10 +31,12 @@ namespace BakeryPOS.API.Services
         {
             // NameId stays as the username for backwards-compat with controllers
             // that read ClaimTypes.NameIdentifier. uid carries the numeric user id.
+            // tenant_id is the multi-tenant scope — CurrentTenant reads it on every request.
             var claims = new List<Claim>
             {
                 new Claim(JwtRegisteredClaimNames.NameId, user.Username),
                 new Claim("uid", user.Id.ToString()),
+                new Claim("tenant_id", user.TenantId.ToString()),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };
 

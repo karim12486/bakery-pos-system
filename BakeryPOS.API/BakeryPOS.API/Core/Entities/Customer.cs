@@ -5,6 +5,7 @@ namespace BakeryPOS.API.Core.Entities
     public class Customer
     {
         public int Id { get; set; }
+        public int TenantId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? PhoneNumber { get; set; }
         public string? Address { get; set; }

@@ -10,6 +10,7 @@
     public class Report
     {
         public int Id { get; set; }
+        public int TenantId { get; set; }
         public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
         public ReportType Type { get; set; }
 

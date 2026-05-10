@@ -1,3 +1,4 @@
+using BakeryPOS.API.Common.Tenancy;
 using BakeryPOS.API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -14,7 +15,12 @@ namespace BakeryPOS.API.Tests.Services;
 /// </summary>
 internal static class TestContextFactory
 {
-    public static AppDbContext Create([System.Runtime.CompilerServices.CallerMemberName] string testName = "")
+    /// <summary>Default tenant id used by tests when cross-tenant behaviour isn't being tested.</summary>
+    public const int DefaultTenantId = 1;
+
+    public static AppDbContext Create(
+        int? tenantId = DefaultTenantId,
+        [System.Runtime.CompilerServices.CallerMemberName] string testName = "")
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase($"nizam-test-{testName}-{Guid.NewGuid():N}")
@@ -24,6 +30,6 @@ internal static class TestContextFactory
             // SQL Server; in tests we treat the call as a no-op.
             .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
-        return new AppDbContext(options);
+        return new AppDbContext(options, new AmbientTenant(tenantId));
     }
 }
