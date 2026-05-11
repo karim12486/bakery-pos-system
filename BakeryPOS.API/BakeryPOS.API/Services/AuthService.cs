@@ -11,6 +11,15 @@ public interface IAuthService
 {
     Task<UserDto> LoginAsync(UserForLoginDto dto, CancellationToken ct);
     Task<IReadOnlyList<string>?> GetActiveUsernamesAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Mints a fresh token for the username carried in the supplied JWT, IFF the signature
+    /// is valid and the user is still active. Lifetime is irrelevant — by design, we want to
+    /// refresh tokens that are mid-shift or recently expired. Lifetime is enforced by the
+    /// AUTH middleware on protected endpoints; this endpoint deliberately accepts an expired
+    /// token (within whatever window the validator's ClockSkew + ValidateLifetime=false allows).
+    /// </summary>
+    Task<UserDto> RefreshAsync(string username, CancellationToken ct);
 }
 
 public sealed class AuthService : IAuthService
@@ -59,6 +68,36 @@ public sealed class AuthService : IAuthService
         if (user == null || !user.IsActive || !isPasswordValid)
         {
             throw new DomainException("ERR_LOGIN_FAILED", genericError, StatusCodes.Status401Unauthorized);
+        }
+
+        var role = !string.IsNullOrEmpty(user.Role)
+            ? user.Role
+            : (user.Permissions.HasFlag(UserPermissions.Admin) ? "Admin" : "Cashier");
+
+        return new UserDto
+        {
+            Username = user.Username,
+            FullName = user.FullName,
+            Token = _tokenService.CreateToken(user),
+            Role = role,
+            Permissions = (int)user.Permissions,
+            ImageUrl = user.ImageUrl
+        };
+    }
+
+    public async Task<UserDto> RefreshAsync(string username, CancellationToken ct)
+    {
+        // Cross-tenant lookup (we trust the signed JWT to tell us which user) — IgnoreQueryFilters
+        // because the caller may have come in on an expired token that we deliberately allow.
+        var user = await _context.Users
+            .IgnoreQueryFilters()
+            .SingleOrDefaultAsync(u => u.Username == username, ct);
+
+        if (user == null || !user.IsActive)
+        {
+            throw new DomainException("ERR_REFRESH_FAILED",
+                "Impossible de renouveler la session. Veuillez vous reconnecter.",
+                StatusCodes.Status401Unauthorized);
         }
 
         var role = !string.IsNullOrEmpty(user.Role)
