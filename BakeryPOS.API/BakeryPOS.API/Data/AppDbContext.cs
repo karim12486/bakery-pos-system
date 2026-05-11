@@ -90,25 +90,28 @@ namespace BakeryPOS.API.Data
             });
 
             // ---- Global query filters: every query is automatically scoped by TenantId. ----
-            // The lambda captures `this` (the AppDbContext) so `_currentTenant.TenantId` is read
-            // at QUERY time, not at OnModelCreating time. That's how each request sees its own data.
+            // CLOSED filter: when _currentTenant.TenantId is null, the predicate `x.TenantId == null`
+            // is never true (TenantId is non-nullable int), so the query returns ZERO rows.
+            // This is the safe-by-default stance — a request that somehow loses its tenant context
+            // (bug, stripped JWT claim, anonymous endpoint) sees no data instead of all data.
             //
-            // Anonymous / cross-tenant operations (signup, seeder, certain background jobs) must
-            // use IgnoreQueryFilters() explicitly. That intent is auditable in code review.
-            modelBuilder.Entity<User>().HasQueryFilter(x => _currentTenant.TenantId == null || x.TenantId == _currentTenant.TenantId);
-            modelBuilder.Entity<Product>().HasQueryFilter(x => _currentTenant.TenantId == null || x.TenantId == _currentTenant.TenantId);
-            modelBuilder.Entity<Category>().HasQueryFilter(x => _currentTenant.TenantId == null || x.TenantId == _currentTenant.TenantId);
-            modelBuilder.Entity<Customer>().HasQueryFilter(x => _currentTenant.TenantId == null || x.TenantId == _currentTenant.TenantId);
-            modelBuilder.Entity<CustomerPayment>().HasQueryFilter(x => _currentTenant.TenantId == null || x.TenantId == _currentTenant.TenantId);
-            modelBuilder.Entity<Sale>().HasQueryFilter(x => _currentTenant.TenantId == null || x.TenantId == _currentTenant.TenantId);
-            modelBuilder.Entity<SaleDetail>().HasQueryFilter(x => _currentTenant.TenantId == null || x.TenantId == _currentTenant.TenantId);
-            modelBuilder.Entity<StockMovement>().HasQueryFilter(x => _currentTenant.TenantId == null || x.TenantId == _currentTenant.TenantId);
-            modelBuilder.Entity<Expense>().HasQueryFilter(x => _currentTenant.TenantId == null || x.TenantId == _currentTenant.TenantId);
-            modelBuilder.Entity<ExpenseCategory>().HasQueryFilter(x => _currentTenant.TenantId == null || x.TenantId == _currentTenant.TenantId);
-            modelBuilder.Entity<Report>().HasQueryFilter(x => _currentTenant.TenantId == null || x.TenantId == _currentTenant.TenantId);
-            modelBuilder.Entity<RemovalRequest>().HasQueryFilter(x => _currentTenant.TenantId == null || x.TenantId == _currentTenant.TenantId);
-            modelBuilder.Entity<Branch>().HasQueryFilter(x => _currentTenant.TenantId == null || x.TenantId == _currentTenant.TenantId);
-            modelBuilder.Entity<IdempotencyRecord>().HasQueryFilter(x => _currentTenant.TenantId == null || x.TenantId == _currentTenant.TenantId);
+            // Cross-tenant access (login lookup before tenant is known, seeder, background jobs
+            // that iterate tenants) MUST use IgnoreQueryFilters() explicitly. That intent is
+            // auditable in code review.
+            modelBuilder.Entity<User>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<Product>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<Category>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<Customer>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<CustomerPayment>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<Sale>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<SaleDetail>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<StockMovement>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<Expense>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<ExpenseCategory>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<Report>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<RemovalRequest>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<Branch>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<IdempotencyRecord>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             // Tenants table itself is NOT filtered — it's the source of truth for tenant lookup
             // (login flow, admin operations).
         }

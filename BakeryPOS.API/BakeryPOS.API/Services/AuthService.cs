@@ -37,7 +37,11 @@ public sealed class AuthService : IAuthService
     {
         const string genericError = "Nom d'utilisateur ou mot de passe incorrect.";
 
+        // IgnoreQueryFilters because the user's tenant isn't known yet — that's literally what
+        // login is for. The token we mint below embeds tenant_id from the user we find, and from
+        // then on the closed global filter scopes every query to that tenant.
         var user = await _context.Users
+            .IgnoreQueryFilters()
             .SingleOrDefaultAsync(u => u.Username.ToLower() == dto.Username.ToLower(), ct);
 
         // Always run BCrypt verify — same wall-clock cost whether the user exists or not.
@@ -77,6 +81,12 @@ public sealed class AuthService : IAuthService
         var allowed = _config.GetValue<bool?>("Auth:AllowUsernameListing") ?? true;
         if (!allowed) return null;
 
+        // Under the closed multi-tenant filter, this endpoint cannot work pre-login because no
+        // tenant is in scope. The kiosk login picker needs to first identify the tenant (e.g. via
+        // subdomain or a tenant-slug query param), then call a tenant-scoped variant. Returning
+        // an empty list here is the safe interim behaviour — the legacy single-tenant kiosk flow
+        // is broken under multi-tenancy and that's intentional until the new flow is wired up.
+        // TODO[saas-launch]: replace with GetActiveUsernamesForTenantAsync(slug, ct).
         return await _context.Users
             .Where(u => u.IsActive)
             .OrderBy(u => u.Username)
