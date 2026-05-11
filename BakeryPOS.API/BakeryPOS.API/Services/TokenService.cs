@@ -37,6 +37,10 @@ namespace BakeryPOS.API.Services
                 new Claim(JwtRegisteredClaimNames.NameId, user.Username),
                 new Claim("uid", user.Id.ToString()),
                 new Claim("tenant_id", user.TenantId.ToString()),
+                // Permissions bitflag — consumed by RemovalHub for fine-grained SignalR group
+                // join authorization. HTTP endpoints still go through the DB-backed HasPermission
+                // filter for revocation-on-the-spot semantics.
+                new Claim("permissions", ((int)user.Permissions).ToString()),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };
 

@@ -1,4 +1,7 @@
-﻿using BakeryPOS.API.Core.Entities;
+using BakeryPOS.API.Common.Errors;
+using BakeryPOS.API.Common.Tenancy;
+using BakeryPOS.API.Core.Entities;
+using BakeryPOS.API.Core.Enums;
 using BakeryPOS.API.Data;
 using BakeryPOS.API.DTOs;
 using BakeryPOS.API.Hubs;
@@ -12,63 +15,69 @@ namespace BakeryPOS.API.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize] // All actions require authentication
+    [Authorize]
     public class RemovalController : ControllerBase
     {
         private readonly AppDbContext _context;
         private readonly IHubContext<RemovalHub> _hubContext;
+        private readonly ICurrentTenant _currentTenant;
 
-        public RemovalController(AppDbContext context, IHubContext<RemovalHub> hubContext)
+        public RemovalController(AppDbContext context, IHubContext<RemovalHub> hubContext, ICurrentTenant currentTenant)
         {
             _context = context;
             _hubContext = hubContext;
+            _currentTenant = currentTenant;
         }
 
         // POST: api/removal/request
-        // Endpoint for a cashier to request an item removal
+        // Cashier requests an item removal; notifies admins of THIS tenant only.
         [HttpPost("request")]
         public async Task<IActionResult> RequestRemoval(RemovalRequestCreateDto requestDto)
         {
+            if (_currentTenant.TenantId is not int tenantId)
+                return Unauthorized();
+
             var username = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var cashier = await _context.Users.SingleOrDefaultAsync(u => u.Username == username);
             if (cashier == null) return Unauthorized();
 
-            // 1. Create and save the request to the database
             var newRequest = new RemovalRequest
             {
                 ProductName = requestDto.ProductName,
                 ProductPrice = requestDto.ProductPrice,
                 RequestingUserId = cashier.Id
+                // TenantId auto-stamped by AppDbContext.SaveChanges
             };
             await _context.RemovalRequests.AddAsync(newRequest);
             await _context.SaveChangesAsync();
 
-            // 2. Prepare the notification payload for admins
             var notification = new
             {
                 requestId = newRequest.Id,
                 productName = newRequest.ProductName,
                 cashierName = cashier.FullName,
                 requestTime = newRequest.RequestTime,
-                cashierConnectionId = requestDto.CashierConnectionId // Pass this through
+                cashierConnectionId = requestDto.CashierConnectionId
             };
 
-            // 3. Use the Hub to send a real-time message to all connected admins
-            await _hubContext.Clients.Group("Admins").SendAsync("NewRemovalRequest", notification);
+            // Tenant-scoped admin group — admins of OTHER tenants don't receive this.
+            await _hubContext.Clients.Group(RemovalHub.AdminGroup(tenantId)).SendAsync("NewRemovalRequest", notification);
 
             return Ok(new { message = "Demande de suppression envoyée à l'administrateur pour approbation." });
         }
 
-        // The only change is fixing the typo in [FromQuery]
-        [HttpPost("{requestId}/respond")]
+        // POST: api/removal/{requestId}/respond
+        [HttpPost("{requestId:int}/respond")]
         public async Task<IActionResult> RespondToRequest(int requestId, [FromBody] RemovalResponseDto responseDto, [FromQuery] string cashierConnectionId)
         {
             var username = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var admin = await _context.Users.SingleOrDefaultAsync(u => u.Username == username);
 
-            if (admin == null || !admin.Permissions.HasFlag(Core.Enums.UserPermissions.Admin))
+            if (admin == null || !admin.Permissions.HasFlag(UserPermissions.ApproveRemovals))
                 return Forbid();
 
+            // The closed tenant filter ensures we can only mutate THIS tenant's request rows;
+            // a cross-tenant requestId returns null → NotFound.
             var request = await _context.RemovalRequests
                                 .Include(r => r.RequestingUser)
                                 .FirstOrDefaultAsync(r => r.Id == requestId);

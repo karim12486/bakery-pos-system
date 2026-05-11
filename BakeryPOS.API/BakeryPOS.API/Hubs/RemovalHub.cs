@@ -1,31 +1,45 @@
-﻿using Microsoft.AspNetCore.SignalR;
-using System.Threading.Tasks;
+using BakeryPOS.API.Common.Tenancy;
+using BakeryPOS.API.Core.Enums;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.SignalR;
+using System.Security.Claims;
 
 namespace BakeryPOS.API.Hubs
 {
+    /// <summary>
+    /// Hub for the cashier-requests-removal / admin-approves flow.
+    /// Group names are tenant-scoped so Tenant A's removal requests never reach Tenant B's admins.
+    /// </summary>
+    [Authorize]
     public class RemovalHub : Hub
     {
-        // This method will be called by an admin client to join a specific "Admins" group.
-        // This allows us to send messages to all connected admins at once.
+        /// <summary>
+        /// Returns the tenant-scoped admin-group name. Server-side helper for the controller too.
+        /// </summary>
+        public static string AdminGroup(int tenantId) => $"Admins:{tenantId}";
+
+        /// <summary>
+        /// Called by an admin client to subscribe to removal-request notifications for THEIR tenant.
+        /// Verifies the caller actually has ApproveRemovals permission — otherwise a regular cashier
+        /// could join the admin group and see every removal request.
+        /// </summary>
         public async Task JoinAdminsGroup()
         {
-            await Groups.AddToGroupAsync(Context.ConnectionId, "Admins");
-        }
+            var tenantIdClaim = Context.User?.FindFirst(CurrentTenant.TenantClaim)?.Value;
+            if (!int.TryParse(tenantIdClaim, out var tenantId))
+            {
+                throw new HubException("Tenant context missing.");
+            }
 
-        // This is a server-side method that the frontend doesn't call.
-        // Our API controller will call this method to notify all admins.
-        public async Task NotifyAdminsOfNewRequest(object request)
-        {
-            // This sends a message named "NewRemovalRequest" to all clients in the "Admins" group.
-            // The 'request' object will be the details of the removal request.
-            await Clients.Group("Admins").SendAsync("NewRemovalRequest", request);
-        }
+            var permsClaim = Context.User?.FindFirst("permissions")?.Value;
+            // Permission check: must have ApproveRemovals. The legacy bitflag enum stores int.
+            if (!int.TryParse(permsClaim, out var permsInt) ||
+                !((UserPermissions)permsInt).HasFlag(UserPermissions.ApproveRemovals))
+            {
+                throw new HubException("Forbidden.");
+            }
 
-        // This is another server-side method our API will call.
-        public async Task NotifyCashierOfStatusUpdate(string cashierConnectionId, object update)
-        {
-            // This sends a message to one specific cashier client, identified by their unique connection ID.
-            await Clients.Client(cashierConnectionId).SendAsync("RemovalRequestStatusChanged", update);
+            await Groups.AddToGroupAsync(Context.ConnectionId, AdminGroup(tenantId));
         }
     }
 }
