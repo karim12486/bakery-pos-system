@@ -31,12 +31,12 @@ public sealed class SaleForCreateDtoValidator : AbstractValidator<SaleForCreateD
                 .WithMessage("Pour un paiement partagé, le montant Carte est requis.");
         });
 
-        // Credit (= customer tab) requires a customer to be attached.
-        When(x => x.PaymentMethod == PaymentType.Credit, () =>
+        // Tab (= customer pays later from running balance) requires a customer to be attached.
+        When(x => x.PaymentMethod == PaymentType.Tab, () =>
         {
             RuleFor(x => x.CustomerId)
                 .NotNull().GreaterThan(0)
-                .WithMessage("Un client doit être sélectionné pour un paiement à crédit.");
+                .WithMessage("Un client doit être sélectionné pour un paiement sur compte.");
         });
     }
 }

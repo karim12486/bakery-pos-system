@@ -216,9 +216,10 @@ public sealed class SalesService : ISalesService
                 }
                 break;
             }
-            case PaymentType.Credit:
+            case PaymentType.Tab:
             {
-                // Treat any AmountPaid as a cash deposit; remainder goes onto the customer's tab.
+                // "Tab" = pay later via the customer's running balance. AmountPaid is treated as
+                // an optional cash deposit; the rest accumulates as debt on Customer.CurrentBalance.
                 cashPaid = dto.AmountPaid;
                 totalPaidNow = cashPaid;
                 break;
