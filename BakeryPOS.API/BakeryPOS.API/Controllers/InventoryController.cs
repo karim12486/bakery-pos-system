@@ -1,95 +1,42 @@
-﻿using BakeryPOS.API.Core.Attributes;
-using BakeryPOS.API.Core.Entities;
+using System.Security.Claims;
+using BakeryPOS.API.Core.Attributes;
 using BakeryPOS.API.Core.Enums;
-using BakeryPOS.API.Data;
 using BakeryPOS.API.DTOs;
+using BakeryPOS.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
 
 namespace BakeryPOS.API.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize] // All inventory actions require authentication
+    [Authorize]
     public class InventoryController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly IInventoryService _inventory;
 
-        public InventoryController(AppDbContext context)
+        public InventoryController(IInventoryService inventory)
         {
-            _context = context;
+            _inventory = inventory;
         }
 
-        // POST: api/inventory/add
         [HasPermission(UserPermissions.ManageInventory)]
         [HttpPost("add")]
-        public async Task<IActionResult> AddStock(StockAdditionDto stockAdditionDto)
+        public async Task<IActionResult> AddStock(StockAdditionDto dto, CancellationToken ct)
         {
-            // --- Find the product ---
-            var product = await _context.Products.FindAsync(stockAdditionDto.ProductId);
-            if (product == null)
-            {
-                return NotFound($"Produit introuvable.");
-            }
-
-            // --- Get the current user ---
-            var username = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var user = await _context.Users.SingleOrDefaultAsync(u => u.Username == username);
-            if (user == null)
-            {
-                return Unauthorized(); // Should not happen
-            }
-
-            // --- Update product stock ---
-            product.StockQuantity += stockAdditionDto.QuantityToAdd;
-
-            // --- Create a stock movement log ---
-            var stockMovement = new StockMovement
-            {
-                ProductId = product.Id,
-                UserId = user.Id,
-                QuantityChange = stockAdditionDto.QuantityToAdd, // Positive for addition
-                Type = StockMovementType.Addition
-            };
-            await _context.StockMovements.AddAsync(stockMovement);
-
-            // --- Save all changes in a single transaction ---
-            await _context.SaveChangesAsync();
-
-            return Ok($"Stock pour '{product.Name}' mis à jour avec succès. Nouvelle quantité : {product.StockQuantity}");
+            var username = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? throw new UnauthorizedAccessException();
+            var (productName, newQuantity) = await _inventory.AddStockAsync(dto, username, ct);
+            return Ok($"Stock pour '{productName}' mis à jour avec succès. Nouvelle quantité : {newQuantity}");
         }
 
-        // GET: api/inventory/history/{productId}
         [HasPermission(UserPermissions.ManageInventory)]
-        [HttpGet("history/{productId}")]
-        public async Task<ActionResult<IEnumerable<StockMovementDto>>> GetStockHistory(int productId)
+        [HttpGet("history/{productId:int}")]
+        public async Task<ActionResult<IEnumerable<StockMovementDto>>> GetStockHistory(int productId, CancellationToken ct)
         {
-            var movements = await _context.StockMovements
-                .Include(sm => sm.Product) // Eagerly load the related Product
-                .Include(sm => sm.User)    // Eagerly load the related User
-                .Where(sm => sm.ProductId == productId)
-                .OrderByDescending(sm => sm.Timestamp) // Show the most recent first
-                .ToListAsync();
-
-            if (!movements.Any())
-            {
-                return NotFound($"Aucun historique de stock trouvé pour le produit portant l'identifiant {productId}.");
-            }
-
-            // Manually map to DTOs
-            var movementDtos = movements.Select(sm => new StockMovementDto
-            {
-                Id = sm.Id,
-                Timestamp = sm.Timestamp,
-                QuantityChange = sm.QuantityChange,
-                Type = sm.Type.ToString(), // Convert enum to string
-                ProductName = sm.Product.Name,
-                UserName = sm.User.FullName
-            }).ToList();
-
-            return Ok(movementDtos);
+            var movements = await _inventory.GetStockHistoryAsync(productId, ct);
+            return movements.Count == 0
+                ? NotFound($"Aucun historique de stock trouvé pour le produit portant l'identifiant {productId}.")
+                : Ok(movements);
         }
     }
 }

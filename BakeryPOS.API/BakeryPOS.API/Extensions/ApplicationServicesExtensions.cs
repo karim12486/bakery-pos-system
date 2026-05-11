@@ -33,6 +33,7 @@ public static class ApplicationServicesExtensions
         services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<IExpenseService, ExpenseService>();
         services.AddScoped<ISalesService, SalesService>();
+        services.AddScoped<IInventoryService, InventoryService>();
         services.AddScoped<IIdempotencyService, IdempotencyService>();
 
         // Outbound HTTP (used by the Telegram notifier; pooled by the framework)
