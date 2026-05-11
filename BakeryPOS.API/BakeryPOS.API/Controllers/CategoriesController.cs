@@ -1,4 +1,5 @@
 ﻿using AutoMapper;
+using BakeryPOS.API.Common.Errors;
 using BakeryPOS.API.Core.Attributes;
 using BakeryPOS.API.Core.Entities;
 using BakeryPOS.API.Core.Enums;
@@ -69,7 +70,16 @@ namespace BakeryPOS.API.Controllers
         {
             var category = await _context.Categories.FindAsync(id);
             if (category == null) return NotFound();
-            // Optional: Check if products exist in this category before deleting
+
+            // Refuse to leave orphaned products. Without this guard the SQL FK constraint throws
+            // a raw DbUpdateException at SaveChanges and the caller sees a 500.
+            if (await _context.Products.AnyAsync(p => p.CategoryId == id))
+            {
+                throw new DomainConflictException(
+                    "ERR_CATEGORY_IN_USE",
+                    "Impossible de supprimer cette catégorie car elle est liée à des produits existants. Veuillez d'abord déplacer ou supprimer ces produits.");
+            }
+
             _context.Categories.Remove(category);
             await _context.SaveChangesAsync();
             return NoContent();
