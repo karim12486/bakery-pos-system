@@ -75,7 +75,25 @@ public class SalesController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(idemKey))
         {
-            await _idempotency.StoreAsync(EndpointId, idemKey, StatusCodes.Status200OK, body, ct);
+            // StoreAsync handles the concurrent-race case: if a peer with the same key stored
+            // first, the returned CachedResponse is the WINNER's response, not ours. Return that
+            // so both racing callers see the same payload.
+            //
+            // NOTE: this does NOT prevent duplicate WORK (both callers may have executed CreateAsync
+            // before either stored). Eliminating that requires wrapping idempotency + work in a
+            // single outer transaction — tracked as a follow-up. For now, the race window is
+            // small (low-millisecond) and the cashier double-tap (the realistic case) is fully
+            // protected because the first call completes before the second arrives.
+            var stored = await _idempotency.StoreAsync(EndpointId, idemKey, StatusCodes.Status200OK, body, ct);
+            if (stored.Body != body)
+            {
+                return new ContentResult
+                {
+                    StatusCode = stored.StatusCode,
+                    Content = stored.Body,
+                    ContentType = "application/json"
+                };
+            }
         }
 
         return Ok(result);
