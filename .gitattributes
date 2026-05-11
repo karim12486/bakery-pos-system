@@ -1,0 +1,23 @@
+# Normalise line endings. Without this, every Windows commit emits LF→CRLF warnings
+# and the working tree can drift between contributors on different OSes.
+
+* text=auto
+
+# C# source: CRLF on disk (matches Visual Studio's default and SQL Server tooling).
+*.cs       text eol=crlf
+*.csproj   text eol=crlf
+*.sln      text eol=crlf
+*.json     text eol=crlf
+*.md       text eol=crlf
+*.gitignore text eol=crlf
+*.gitattributes text eol=crlf
+
+# Binary — don't try to diff/merge.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.pdf binary
+*.dll binary
+*.exe binary
+*.bak binary

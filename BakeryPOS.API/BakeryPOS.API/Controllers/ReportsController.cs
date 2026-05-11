@@ -1,6 +1,5 @@
 ﻿using BakeryPOS.API.Core.Entities;
 using BakeryPOS.API.Core.Interfaces;
-using BakeryPOS.API.Core.Interfaces;
 using BakeryPOS.API.Data;
 using BakeryPOS.API.DTOs;
 using BakeryPOS.API.DTOs.Shared;
