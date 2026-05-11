@@ -10,6 +10,12 @@ namespace BakeryPOS.API.Core.Entities
         public string? PhoneNumber { get; set; }
         public string? Address { get; set; }
 
+        /// <summary>
+        /// Soft-delete flag. Inactive customers don't appear in pickers but their historical
+        /// sales and payments are preserved for audit and reporting.
+        /// </summary>
+        public bool IsActive { get; set; } = true;
+
         [Column(TypeName = "decimal(18, 2)")]
         public decimal CurrentBalance { get; set; } = 0; // Positive means customer has credit, negative means they owe money
 

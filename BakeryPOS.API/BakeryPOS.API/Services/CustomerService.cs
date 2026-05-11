@@ -32,7 +32,9 @@ public sealed class CustomerService : ICustomerService
 
     public async Task<PagedResponse<CustomerDto>> ListAsync(PaginationParams pagination, string? search, CancellationToken ct)
     {
-        var query = _context.Customers.AsQueryable();
+        // Soft-deleted customers don't appear in the picker but their historical sales/payments
+        // are still visible via GetAsync / GetTransactionsAsync (no IsActive filter there).
+        var query = _context.Customers.Where(c => c.IsActive);
 
         if (!string.IsNullOrEmpty(search))
         {
@@ -145,11 +147,10 @@ public sealed class CustomerService : ICustomerService
         var customer = await _context.Customers.FindAsync(new object?[] { id }, ct)
             ?? throw new DomainNotFoundException("ERR_CUSTOMER_NOT_FOUND", "Client introuvable.");
 
-        if (await _context.Sales.AnyAsync(s => s.CustomerId == id, ct))
-            throw new DomainConflictException("ERR_CUSTOMER_HAS_SALES",
-                "Impossible de supprimer un client ayant un historique de ventes. Veuillez plutôt le désactiver.");
-
-        _context.Customers.Remove(customer);
+        // Soft delete: preserves historical Sales and CustomerPayments for audit + reporting.
+        // The legacy hard-delete path was buggy — it only checked Sales but not CustomerPayments,
+        // so a customer who had paid but never bought anything threw a raw FK exception.
+        customer.IsActive = false;
         await _context.SaveChangesAsync(ct);
     }
 
@@ -157,6 +158,10 @@ public sealed class CustomerService : ICustomerService
     {
         var customer = await _context.Customers.FindAsync(new object?[] { customerId }, ct)
             ?? throw new DomainNotFoundException("ERR_CUSTOMER_NOT_FOUND", "Client introuvable.");
+
+        if (!customer.IsActive)
+            throw new DomainConflictException("ERR_CUSTOMER_INACTIVE",
+                "Impossible d'enregistrer un paiement pour un client désactivé.");
 
         var user = await _context.Users.SingleOrDefaultAsync(u => u.Username == username, ct)
             ?? throw new DomainException("ERR_CASHIER_NOT_FOUND", "Caissier introuvable.", StatusCodes.Status401Unauthorized);
