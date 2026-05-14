@@ -56,10 +56,12 @@ public sealed class TenantSignupService : ITenantSignupService
         {
             Name = dto.BusinessName.Trim(),
             Slug = slug,
-            Plan = "trial",
+            PlanCode = "growth",
+            BillingCycle = "monthly",
+            TrialEndsAt = DateTime.UtcNow.AddDays(14),
             Currency = string.IsNullOrWhiteSpace(dto.Currency) ? "EGP" : dto.Currency.Trim().ToUpperInvariant(),
             Locale = string.IsNullOrWhiteSpace(dto.Locale) ? "ar-EG" : dto.Locale.Trim(),
-            Status = "active",
+            Status = "trialing",
             CreatedAt = DateTime.UtcNow
         };
         _context.Tenants.Add(tenant);

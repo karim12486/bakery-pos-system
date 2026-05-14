@@ -31,6 +31,10 @@ namespace Nizam.Api.Data.Seed
         {
             await context.Database.MigrateAsync();
 
+            // 0. Subscription plan catalog. Must run before any Tenant create so the
+            //    Tenants.PlanCode FK can be satisfied. Idempotent upsert.
+            await PlanCatalogSeeder.SeedAsync(context, logger);
+
             // 1. Default Tenant
             // IgnoreQueryFilters because the seeder runs without a tenant in scope.
             var tenant = await context.Tenants
@@ -43,7 +47,8 @@ namespace Nizam.Api.Data.Seed
                 {
                     Name = "Default",
                     Slug = DefaultTenantSlug,
-                    Plan = "trial",
+                    PlanCode = "starter",
+                    BillingCycle = "monthly",
                     Currency = "EGP",
                     Locale = "ar-EG",
                     Status = "active",

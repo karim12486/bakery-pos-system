@@ -17,6 +17,11 @@ namespace Nizam.Api.Data
         public DbSet<Tenant> Tenants { get; set; }
         public DbSet<Branch> Branches { get; set; }
 
+        // Subscription plan catalog (tenant-AGNOSTIC — shared product catalog).
+        public DbSet<Plan> Plans { get; set; }
+        public DbSet<PlanFeature> PlanFeatures { get; set; }
+        public DbSet<PlanLimit> PlanLimits { get; set; }
+
         // Existing entities (all now have TenantId; the four operational ones also have BranchId).
         public DbSet<User> Users { get; set; }
         public DbSet<Product> Products { get; set; }
@@ -57,11 +62,45 @@ namespace Nizam.Api.Data
             {
                 e.Property(x => x.Name).HasMaxLength(120).IsRequired();
                 e.Property(x => x.Slug).HasMaxLength(60).IsRequired();
-                e.Property(x => x.Plan).HasMaxLength(40).IsRequired();
+                e.Property(x => x.PlanCode).HasMaxLength(40).IsRequired();
+                e.Property(x => x.BillingCycle).HasMaxLength(20).IsRequired();
                 e.Property(x => x.Currency).HasMaxLength(3).IsRequired();
                 e.Property(x => x.Locale).HasMaxLength(20).IsRequired();
                 e.Property(x => x.Status).HasMaxLength(40).IsRequired();
                 e.HasIndex(x => x.Slug).IsUnique();
+                e.HasIndex(x => x.PlanCode);
+                // FK Tenant.PlanCode → Plan.Code. Restrict — never delete a plan that has tenants on it.
+                e.HasOne(x => x.Plan).WithMany().HasForeignKey(x => x.PlanCode)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ---- Plan catalog (tenant-AGNOSTIC; no query filter, no TenantId column) ----
+            modelBuilder.Entity<Plan>(e =>
+            {
+                e.HasKey(x => x.Code);
+                e.Property(x => x.Code).HasMaxLength(40);
+                e.Property(x => x.Name).HasMaxLength(120).IsRequired();
+                e.Property(x => x.Description).HasMaxLength(500);
+                e.Property(x => x.MonthlyPriceEgp).HasColumnType("decimal(10,2)");
+                e.Property(x => x.AnnualPriceEgp).HasColumnType("decimal(10,2)");
+            });
+
+            modelBuilder.Entity<PlanFeature>(e =>
+            {
+                e.Property(x => x.PlanCode).HasMaxLength(40).IsRequired();
+                e.Property(x => x.FeatureKey).HasMaxLength(60).IsRequired();
+                e.HasIndex(x => new { x.PlanCode, x.FeatureKey }).IsUnique();
+                e.HasOne(x => x.Plan).WithMany(p => p.Features).HasForeignKey(x => x.PlanCode)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<PlanLimit>(e =>
+            {
+                e.Property(x => x.PlanCode).HasMaxLength(40).IsRequired();
+                e.Property(x => x.LimitKey).HasMaxLength(60).IsRequired();
+                e.HasIndex(x => new { x.PlanCode, x.LimitKey }).IsUnique();
+                e.HasOne(x => x.Plan).WithMany(p => p.Limits).HasForeignKey(x => x.PlanCode)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             modelBuilder.Entity<Branch>(e =>
