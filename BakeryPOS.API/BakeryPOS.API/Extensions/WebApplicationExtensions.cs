@@ -1,5 +1,6 @@
 using System.Globalization;
 using BakeryPOS.API.Common.Errors;
+using BakeryPOS.API.Common.Localization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
@@ -8,9 +9,9 @@ namespace BakeryPOS.API.Extensions;
 public static class WebApplicationExtensions
 {
     /// <summary>
-    /// Wires the request pipeline in the canonical order: Swagger UI → CORS → RateLimiter →
-    /// AuthN → AuthZ → static files. HTTPS redirect is intentionally OFF for local LAN HTTP;
-    /// see README.
+    /// Wires the request pipeline in the canonical order: ProblemDetails → Swagger UI → CORS →
+    /// RateLimiter → AuthN → AuthZ → TenantCulture → static files. HTTPS redirect is intentionally
+    /// OFF for local LAN HTTP; see README.
     /// </summary>
     public static WebApplication UseBakeryPosPipeline(this WebApplication app)
     {
@@ -32,6 +33,11 @@ public static class WebApplicationExtensions
         app.UseRateLimiter();
         app.UseAuthentication();
         app.UseAuthorization();
+
+        // Per-tenant culture — runs AFTER auth so tenant_id claim is available.
+        // Reads Tenant.Locale (or Accept-Language override) and sets CurrentCulture for the
+        // request scope. Replaces the legacy hard-coded fr-MA default.
+        app.UseMiddleware<TenantCultureMiddleware>();
 
         app.UseBakeryPosStaticFiles();
 
@@ -61,13 +67,17 @@ public static class WebApplicationExtensions
     }
 
     /// <summary>
-    /// Sets the default thread culture. Today: French (Morocco) — left over from the freelance
-    /// bakery customer. The SaaS migration will replace this with per-tenant culture middleware
-    /// driven by <c>Tenant.Locale</c>.
+    /// Sets the PROCESS-WIDE default culture — used by background services (hosted services,
+    /// the seeder) that run outside any HTTP request and therefore don't go through the
+    /// per-request <see cref="TenantCultureMiddleware"/>.
+    ///
+    /// Defaults to Egyptian Arabic to match the SaaS launch market. Per-request culture for
+    /// authenticated calls is set by <see cref="TenantCultureMiddleware"/> from
+    /// <c>Tenant.Locale</c>.
     /// </summary>
     public static WebApplication UseBakeryPosLocalization(this WebApplication app)
     {
-        var defaultCulture = new CultureInfo("fr-MA");
+        var defaultCulture = new CultureInfo("ar-EG");
         CultureInfo.DefaultThreadCurrentCulture = defaultCulture;
         CultureInfo.DefaultThreadCurrentUICulture = defaultCulture;
         return app;
