@@ -81,15 +81,10 @@ public sealed class ShiftService : IShiftService
             throw new DomainConflictException("ERR_SHIFT_ALREADY_CLOSED",
                 "Cette session a déjà été fermée.");
 
-        // Compute totals from this shift's orders. Order.ShiftId not yet populated (Phase A's
-        // SalesService.CreateAsync doesn't know about shifts yet — wired in a follow-up that
-        // links SalesController to "open shift required"). For now we compute over the shift's
-        // time window for the cashier — temporary but accurate while the wiring catches up.
+        // SalesService now stamps Order.ShiftId at creation (refuses the sale if no shift
+        // is open), so we pivot directly on the FK — no fragile time-window heuristic.
         var orders = await _context.Orders
-            .Where(o => o.CashierUserId == shift.UserId
-                     && o.OpenedAt >= shift.OpenedAt
-                     && o.OpenedAt <= DateTime.UtcNow
-                     && o.Status == OrderStatus.Closed)
+            .Where(o => o.ShiftId == shift.Id && o.Status == OrderStatus.Closed)
             .ToListAsync(ct);
 
         var orderIds = orders.Select(o => o.Id).ToList();
@@ -171,10 +166,7 @@ public sealed class ShiftService : IShiftService
         if (shift == null || shift.ClosedAt == null) return null;
 
         var orders = await _context.Orders
-            .Where(o => o.CashierUserId == shift.UserId
-                     && o.OpenedAt >= shift.OpenedAt
-                     && o.OpenedAt <= shift.ClosedAt
-                     && o.Status == OrderStatus.Closed)
+            .Where(o => o.ShiftId == shift.Id && o.Status == OrderStatus.Closed)
             .ToListAsync(ct);
         var orderIds = orders.Select(o => o.Id).ToList();
         var sales = await _context.Sales

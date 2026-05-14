@@ -85,6 +85,14 @@ public sealed class SalesService : ISalesService
         var cashier = await _context.Users.SingleOrDefaultAsync(u => u.Username == username, ct)
             ?? throw new DomainException("ERR_CASHIER_NOT_FOUND", "Caissier introuvable.", StatusCodes.Status401Unauthorized);
 
+        // A sale must happen inside an open shift. The Open POS Shift screen guarantees the
+        // cashier has one before they reach the Cashier screen — but enforce server-side too
+        // so the audit trail and Z-report are accurate even if a client bypasses the flow.
+        var openShift = await _context.Shifts
+            .FirstOrDefaultAsync(s => s.UserId == cashier.Id && s.ClosedAt == null, ct)
+            ?? throw new DomainConflictException("ERR_NO_OPEN_SHIFT",
+                "Vous devez ouvrir une session de caisse avant d'enregistrer une vente.");
+
         // Load all referenced products in one query.
         var productIds = dto.SaleDetails.Select(d => d.ProductId).Distinct().ToList();
         var products = await _context.Products
@@ -133,6 +141,8 @@ public sealed class SalesService : ISalesService
         {
             CashierUserId = cashier.Id,
             CustomerId = dto.CustomerId,
+            ShiftId = openShift.Id,        // stamped from the cashier's open shift
+            BranchId = openShift.BranchId, // shift's branch IS the order's branch
             Status = OrderStatus.Closed,
             Channel = OrderChannel.Takeaway,
             TableId = null,
@@ -142,7 +152,7 @@ public sealed class SalesService : ISalesService
             DiscountAmount = discountAmount,
             TaxAmount = 0, // Phase A doesn't price-out per-item tax yet
             FinalAmount = finalAmount
-            // TenantId + BranchId auto-stamped if applicable
+            // TenantId auto-stamped
         };
         await _context.Orders.AddAsync(newOrder, ct);
 
@@ -150,6 +160,7 @@ public sealed class SalesService : ISalesService
         var newSale = new Sale
         {
             UserId = cashier.Id,
+            BranchId = openShift.BranchId,
             SaleDate = now,
             TotalAmount = totalAmount,
             DiscountAmount = discountAmount,
@@ -201,6 +212,7 @@ public sealed class SalesService : ISalesService
             {
                 ProductId = product.Id,
                 UserId = cashier.Id,
+                BranchId = openShift.BranchId,
                 QuantityChange = -item.Quantity,
                 Type = StockMovementType.Sale
             }, ct);

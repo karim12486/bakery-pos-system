@@ -62,6 +62,16 @@ public class SalesServiceTests
         ctx.Products.Add(product);
         await ctx.SaveChangesAsync();
 
+        // SalesService.CreateAsync now requires an open shift for the cashier (R3.2 wiring).
+        ctx.Shifts.Add(new Shift
+        {
+            UserId = cashier.Id,
+            BranchId = 1,
+            OpeningFloat = 100m,
+            OpenedAt = DateTime.UtcNow
+        });
+        await ctx.SaveChangesAsync();
+
         return (ctx, cashier, product);
     }
 
@@ -195,5 +205,47 @@ public class SalesServiceTests
         // edge — but at the service level it's a plain ValidationException.
         await Assert.ThrowsAsync<ValidationException>(
             () => svc.CreateAsync(dto, cashier.Username, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithNoOpenShift_ThrowsDomainConflict()
+    {
+        // Seed everything except the open shift.
+        var ctx = TestContextFactory.Create();
+        var cashier = new User
+        {
+            Username = "no-shift-cashier",
+            PasswordHash = "n/a",
+            FullName = "No Shift",
+            IsActive = true,
+            Permissions = UserPermissions.ProcessSales
+        };
+        ctx.Users.Add(cashier);
+        var category = new Category { Name = "Cakes" };
+        ctx.Categories.Add(category);
+        await ctx.SaveChangesAsync();
+        var product = new Product
+        {
+            Name = "Cupcake", Description = "", Price = 10m, CostPrice = 4m,
+            StockQuantity = 5, CategoryId = category.Id, IsActive = true, CreatedAt = DateTime.UtcNow
+        };
+        ctx.Products.Add(product);
+        await ctx.SaveChangesAsync();
+        // (no Shift added)
+
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService());
+        var dto = new SaleForCreateDto
+        {
+            PaymentMethod = PaymentType.Cash,
+            AmountPaid = 100m,
+            SaleDetails = new List<SaleDetailForCreateDto>
+            {
+                new() { ProductId = product.Id, Quantity = 1 }
+            }
+        };
+
+        var ex = await Assert.ThrowsAsync<DomainConflictException>(
+            () => svc.CreateAsync(dto, cashier.Username, CancellationToken.None));
+        Assert.Equal("ERR_NO_OPEN_SHIFT", ex.ErrorCode);
     }
 }
