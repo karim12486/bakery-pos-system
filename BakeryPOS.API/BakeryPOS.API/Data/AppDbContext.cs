@@ -31,6 +31,8 @@ namespace BakeryPOS.API.Data
         public DbSet<ExpenseCategory> ExpenseCategories { get; set; }
         public DbSet<RemovalRequest> RemovalRequests { get; set; }
         public DbSet<IdempotencyRecord> IdempotencyRecords { get; set; }
+        public DbSet<Order> Orders { get; set; }
+        public DbSet<OrderItem> OrderItems { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -42,6 +44,9 @@ namespace BakeryPOS.API.Data
             modelBuilder.Entity<Report>().Property(r => r.Type).HasConversion<string>();
             modelBuilder.Entity<Sale>().Property(s => s.PaymentMethod).HasConversion<string>();
             modelBuilder.Entity<RemovalRequest>().Property(r => r.Status).HasConversion<string>();
+            modelBuilder.Entity<Order>().Property(o => o.Status).HasConversion<string>();
+            modelBuilder.Entity<Order>().Property(o => o.Channel).HasConversion<string>();
+            modelBuilder.Entity<OrderItem>().Property(i => i.Status).HasConversion<string>();
 
             // ---- Tenant + Branch shape ----
             modelBuilder.Entity<Tenant>(e =>
@@ -79,6 +84,34 @@ namespace BakeryPOS.API.Data
             modelBuilder.Entity<ExpenseCategory>().HasIndex(x => x.TenantId);
             modelBuilder.Entity<Report>().HasIndex(x => x.TenantId);
             modelBuilder.Entity<RemovalRequest>().HasIndex(x => new { x.TenantId, x.BranchId });
+            modelBuilder.Entity<Order>().HasIndex(x => new { x.TenantId, x.BranchId, x.OpenedAt });
+            modelBuilder.Entity<OrderItem>().HasIndex(x => new { x.TenantId, x.OrderId });
+
+            // Order shape
+            modelBuilder.Entity<Order>(e =>
+            {
+                e.Property(x => x.Status).HasMaxLength(20).IsRequired();
+                e.Property(x => x.Channel).HasMaxLength(20).IsRequired();
+                e.Property(x => x.Notes).HasMaxLength(500);
+                e.HasOne(x => x.Cashier).WithMany().HasForeignKey(x => x.CashierUserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+            modelBuilder.Entity<OrderItem>(e =>
+            {
+                e.Property(x => x.Status).HasMaxLength(20).IsRequired();
+                e.Property(x => x.Notes).HasMaxLength(300);
+                e.HasOne(x => x.Order).WithMany(o => o.Items).HasForeignKey(x => x.OrderId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+            // Sale → Order is the 1:1 envelope. Optional FK while SaleDetail-legacy and the new
+            // Order model coexist; new sales always populate it.
+            modelBuilder.Entity<Sale>()
+                .HasOne(s => s.Order).WithMany().HasForeignKey(s => s.OrderId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             // Idempotency unique key is per-tenant (so different tenants can use overlapping keys).
             modelBuilder.Entity<IdempotencyRecord>(e =>
@@ -112,6 +145,8 @@ namespace BakeryPOS.API.Data
             modelBuilder.Entity<RemovalRequest>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<Branch>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<IdempotencyRecord>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<Order>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<OrderItem>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             // Tenants table itself is NOT filtered — it's the source of truth for tenant lookup
             // (login flow, admin operations).
         }

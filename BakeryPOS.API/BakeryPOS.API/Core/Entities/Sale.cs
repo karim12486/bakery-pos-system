@@ -41,6 +41,11 @@ namespace BakeryPOS.API.Core.Entities
         // Navigation property for all the items in this sale
         public ICollection<SaleDetail> SaleDetails { get; set; } = new List<SaleDetail>();
 
+        /// <summary>FK to the parent <see cref="Order"/>. Nullable while the SaleDetail-legacy
+        /// model and the new Order/OrderItem model coexist; new sales always set this.</summary>
+        public int? OrderId { get; set; }
+        public Order? Order { get; set; }
+
         [Column(TypeName = "decimal(18, 2)")]
         public decimal CashPaid { get; set; } = 0;
 

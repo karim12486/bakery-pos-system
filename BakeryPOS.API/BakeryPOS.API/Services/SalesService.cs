@@ -125,10 +125,30 @@ public sealed class SalesService : ISalesService
         if (amountOwed > 0.001m && customer != null)
             customer.CurrentBalance -= amountOwed;
 
+        // ---- Order envelope (B-aware schema; Phase A creates orders closed-on-arrival) ----
+        var now = DateTime.UtcNow;
+        var newOrder = new Order
+        {
+            CashierUserId = cashier.Id,
+            CustomerId = dto.CustomerId,
+            Status = OrderStatus.Closed,
+            Channel = OrderChannel.Takeaway,
+            TableId = null,
+            OpenedAt = now,
+            ClosedAt = now,
+            Subtotal = totalAmount,
+            DiscountAmount = discountAmount,
+            TaxAmount = 0, // Phase A doesn't price-out per-item tax yet
+            FinalAmount = finalAmount
+            // TenantId + BranchId auto-stamped if applicable
+        };
+        await _context.Orders.AddAsync(newOrder, ct);
+
+        // ---- Legacy Sale (the payment record) — points at the Order via OrderId ----
         var newSale = new Sale
         {
             UserId = cashier.Id,
-            SaleDate = DateTime.UtcNow,
+            SaleDate = now,
             TotalAmount = totalAmount,
             DiscountAmount = discountAmount,
             FinalAmount = finalAmount,
@@ -138,11 +158,12 @@ public sealed class SalesService : ISalesService
             ChangeGiven = changeGiven,
             CustomerId = dto.CustomerId,
             CashPaid = cashPaid,
-            CardPaid = cardPaid
+            CardPaid = cardPaid,
+            Order = newOrder
         };
         await _context.Sales.AddAsync(newSale, ct);
 
-        // Stock decrement + ledger entries.
+        // Stock decrement + ledger entries + OrderItem mirror.
         foreach (var item in dto.SaleDetails)
         {
             var product = products[item.ProductId];
@@ -150,6 +171,9 @@ public sealed class SalesService : ISalesService
                 throw new DomainConflictException("ERR_INSUFFICIENT_STOCK", $"Stock insuffisant pour {product.Name}.");
 
             product.StockQuantity -= item.Quantity;
+            var lineTotal = product.Price * item.Quantity;
+
+            // Legacy SaleDetail — kept during the transition.
             await _context.SaleDetails.AddAsync(new SaleDetail
             {
                 ProductId = product.Id,
@@ -157,6 +181,20 @@ public sealed class SalesService : ISalesService
                 UnitPrice = product.Price,
                 Sale = newSale
             }, ct);
+
+            // New OrderItem — canonical going forward.
+            await _context.OrderItems.AddAsync(new OrderItem
+            {
+                Order = newOrder,
+                ProductId = product.Id,
+                Quantity = item.Quantity,
+                UnitPrice = product.Price,
+                LineTotal = lineTotal,
+                TaxAmount = 0,
+                Modifiers = "[]",
+                Status = OrderItemStatus.Closed
+            }, ct);
+
             await _context.StockMovements.AddAsync(new StockMovement
             {
                 ProductId = product.Id,
