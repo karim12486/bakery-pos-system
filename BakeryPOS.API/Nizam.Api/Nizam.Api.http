@@ -1,0 +1,6 @@
+@Nizam.Api_HostAddress = http://localhost:5095
+
+GET {{Nizam.Api_HostAddress}}/health/live
+Accept: application/json
+
+###
