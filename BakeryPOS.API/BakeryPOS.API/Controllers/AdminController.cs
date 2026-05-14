@@ -68,4 +68,22 @@ public class AdminController : ControllerBase
 
     [HttpGet("permissions")]
     public IActionResult GetPermissions() => Ok(_admin.ListPermissions());
+
+    /// <summary>Lists branch-scoped role assignments for a user (union'd with their tenant-level perms).</summary>
+    [HttpGet("users/{userId:int}/branch-roles")]
+    public async Task<ActionResult<IEnumerable<UserBranchRoleDto>>> ListUserBranchRoles(int userId, CancellationToken ct)
+        => Ok(await _admin.ListUserBranchRolesAsync(userId, ct));
+
+    /// <summary>Grants (or replaces) a per-branch permission set for a user. Idempotent — calling with
+    /// the same (userId, branchId) updates the permissions in place.</summary>
+    [HttpPost("branch-roles")]
+    public async Task<ActionResult<UserBranchRoleDto>> AssignBranchRole(UserBranchRoleAssignDto dto, CancellationToken ct)
+        => Ok(await _admin.AssignBranchRoleAsync(dto, ct));
+
+    [HttpDelete("branch-roles/{id:int}")]
+    public async Task<IActionResult> RevokeBranchRole(int id, CancellationToken ct)
+    {
+        await _admin.RevokeBranchRoleAsync(id, ct);
+        return NoContent();
+    }
 }

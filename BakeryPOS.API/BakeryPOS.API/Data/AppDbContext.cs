@@ -34,6 +34,7 @@ namespace BakeryPOS.API.Data
         public DbSet<Order> Orders { get; set; }
         public DbSet<OrderItem> OrderItems { get; set; }
         public DbSet<Shift> Shifts { get; set; }
+        public DbSet<UserBranchRole> UserBranchRoles { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -88,6 +89,15 @@ namespace BakeryPOS.API.Data
             modelBuilder.Entity<Order>().HasIndex(x => new { x.TenantId, x.BranchId, x.OpenedAt });
             modelBuilder.Entity<OrderItem>().HasIndex(x => new { x.TenantId, x.OrderId });
             modelBuilder.Entity<Shift>().HasIndex(x => new { x.TenantId, x.BranchId, x.UserId, x.ClosedAt });
+            modelBuilder.Entity<UserBranchRole>()
+                .HasIndex(x => new { x.TenantId, x.UserId, x.BranchId }).IsUnique();
+            modelBuilder.Entity<UserBranchRole>(e =>
+            {
+                e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
 
             // Shift shape
             modelBuilder.Entity<Shift>(e =>
@@ -158,6 +168,7 @@ namespace BakeryPOS.API.Data
             modelBuilder.Entity<Order>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<OrderItem>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<Shift>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<UserBranchRole>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             // Tenants table itself is NOT filtered — it's the source of truth for tenant lookup
             // (login flow, admin operations).
         }

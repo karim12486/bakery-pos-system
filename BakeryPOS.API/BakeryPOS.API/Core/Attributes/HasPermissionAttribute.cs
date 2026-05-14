@@ -1,12 +1,25 @@
+using BakeryPOS.API.Common.Tenancy;
 using BakeryPOS.API.Core.Enums;
 using BakeryPOS.API.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace BakeryPOS.API.Core.Attributes
 {
-    // [HasPermission(UserPermissions.ManageProducts)]
+    /// <summary>
+    /// [HasPermission(UserPermissions.ManageProducts)] on a controller / action.
+    ///
+    /// Permission check is the UNION of:
+    /// 1. The user's tenant-level <see cref="Core.Entities.User.Permissions"/> bitflag.
+    /// 2. If a <c>branch_id</c> claim is present in the JWT, the user's
+    ///    <see cref="Core.Entities.UserBranchRole"/> permissions for that specific branch.
+    ///
+    /// So a user can be granted broad perms tenant-wide via <c>User.Permissions</c>,
+    /// AND/OR narrower per-branch perms via UserBranchRole rows. The first user (Admin)
+    /// has all bits set tenant-wide and doesn't need branch rows.
+    /// </summary>
     public class HasPermissionAttribute : TypeFilterAttribute
     {
         public HasPermissionAttribute(UserPermissions permission) : base(typeof(HasPermissionFilter))
@@ -15,7 +28,7 @@ namespace BakeryPOS.API.Core.Attributes
         }
     }
 
-    public class HasPermissionFilter : IAuthorizationFilter
+    public class HasPermissionFilter : IAsyncAuthorizationFilter
     {
         private readonly UserPermissions _requiredPermission;
         private readonly IServiceProvider _serviceProvider;
@@ -26,7 +39,7 @@ namespace BakeryPOS.API.Core.Attributes
             _serviceProvider = serviceProvider;
         }
 
-        public void OnAuthorization(AuthorizationFilterContext context)
+        public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
         {
             if (!context.HttpContext.User.Identity?.IsAuthenticated ?? true)
             {
@@ -34,29 +47,43 @@ namespace BakeryPOS.API.Core.Attributes
                 return;
             }
 
-            var userIdClaim = context.HttpContext.User.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null)
+            var usernameClaim = context.HttpContext.User.FindFirst(ClaimTypes.NameIdentifier);
+            if (usernameClaim == null)
             {
                 context.Result = new UnauthorizedResult();
                 return;
             }
-            var username = userIdClaim.Value;
+            var username = usernameClaim.Value;
 
-            using (var scope = _serviceProvider.CreateScope())
+            // The branch_id claim is optional — if present, we union per-branch grants in.
+            var branchIdStr = context.HttpContext.User.FindFirst(CurrentTenant.BranchClaim)?.Value;
+            int? branchId = int.TryParse(branchIdStr, out var bId) ? bId : null;
+
+            using var scope = _serviceProvider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Username == username);
+            if (user == null || !user.IsActive)
             {
-                var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                var user = dbContext.Users.FirstOrDefault(u => u.Username == username);
+                context.Result = new UnauthorizedResult();
+                return;
+            }
 
-                if (user == null || !user.IsActive)
-                {
-                    context.Result = new UnauthorizedResult();
-                    return;
-                }
+            var effective = user.Permissions;
 
-                if (!user.Permissions.HasFlag(_requiredPermission))
+            if (branchId.HasValue)
+            {
+                var branchRole = await db.UserBranchRoles
+                    .FirstOrDefaultAsync(r => r.UserId == user.Id && r.BranchId == branchId.Value);
+                if (branchRole != null)
                 {
-                    context.Result = new ForbidResult();
+                    effective |= branchRole.Permissions;
                 }
+            }
+
+            if (!effective.HasFlag(_requiredPermission))
+            {
+                context.Result = new ForbidResult();
             }
         }
     }

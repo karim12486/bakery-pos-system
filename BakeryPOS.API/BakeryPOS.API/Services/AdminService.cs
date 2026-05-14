@@ -19,6 +19,10 @@ public interface IAdminService
     Task DeactivateUserAsync(int id, string currentUsername, CancellationToken ct);
     Task ResetPasswordAsync(int id, ResetPasswordDto dto, CancellationToken ct);
     IReadOnlyList<PermissionDto> ListPermissions();
+
+    Task<IReadOnlyList<UserBranchRoleDto>> ListUserBranchRolesAsync(int userId, CancellationToken ct);
+    Task<UserBranchRoleDto> AssignBranchRoleAsync(UserBranchRoleAssignDto dto, CancellationToken ct);
+    Task RevokeBranchRoleAsync(int id, CancellationToken ct);
 }
 
 public sealed class AdminService : IAdminService
@@ -140,4 +144,72 @@ public sealed class AdminService : IAdminService
             .Where(p => p != UserPermissions.None && p != UserPermissions.Admin)
             .Select(p => new PermissionDto { Name = p.ToString(), Value = (int)p })
             .ToList();
+
+    public async Task<IReadOnlyList<UserBranchRoleDto>> ListUserBranchRolesAsync(int userId, CancellationToken ct)
+    {
+        return await _context.UserBranchRoles
+            .Include(r => r.User)
+            .Include(r => r.Branch)
+            .Where(r => r.UserId == userId)
+            .Select(r => new UserBranchRoleDto
+            {
+                Id = r.Id,
+                UserId = r.UserId,
+                UserFullName = r.User!.FullName,
+                BranchId = r.BranchId,
+                BranchName = r.Branch!.Name,
+                Permissions = (int)r.Permissions
+            })
+            .ToListAsync(ct);
+    }
+
+    public async Task<UserBranchRoleDto> AssignBranchRoleAsync(UserBranchRoleAssignDto dto, CancellationToken ct)
+    {
+        var user = await _context.Users.FindAsync(new object?[] { dto.UserId }, ct)
+            ?? throw new DomainNotFoundException("ERR_USER_NOT_FOUND", "Utilisateur introuvable.");
+        var branch = await _context.Branches.FindAsync(new object?[] { dto.BranchId }, ct)
+            ?? throw new DomainNotFoundException("ERR_BRANCH_NOT_FOUND", "Branche introuvable.");
+
+        // Upsert: one row per (user, branch). Re-assignment replaces the perm set.
+        var existing = await _context.UserBranchRoles
+            .FirstOrDefaultAsync(r => r.UserId == dto.UserId && r.BranchId == dto.BranchId, ct);
+
+        UserBranchRole role;
+        if (existing != null)
+        {
+            existing.Permissions = dto.Permissions;
+            role = existing;
+        }
+        else
+        {
+            role = new UserBranchRole
+            {
+                UserId = dto.UserId,
+                BranchId = dto.BranchId,
+                Permissions = dto.Permissions
+                // TenantId auto-stamped by AppDbContext
+            };
+            _context.UserBranchRoles.Add(role);
+        }
+
+        await _context.SaveChangesAsync(ct);
+
+        return new UserBranchRoleDto
+        {
+            Id = role.Id,
+            UserId = role.UserId,
+            UserFullName = user.FullName,
+            BranchId = role.BranchId,
+            BranchName = branch.Name,
+            Permissions = (int)role.Permissions
+        };
+    }
+
+    public async Task RevokeBranchRoleAsync(int id, CancellationToken ct)
+    {
+        var role = await _context.UserBranchRoles.FindAsync(new object?[] { id }, ct)
+            ?? throw new DomainNotFoundException("ERR_BRANCH_ROLE_NOT_FOUND", "Affectation introuvable.");
+        _context.UserBranchRoles.Remove(role);
+        await _context.SaveChangesAsync(ct);
+    }
 }
