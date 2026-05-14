@@ -416,3 +416,6 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Local-only planning / analysis docs (never push)
+docs/planning/
