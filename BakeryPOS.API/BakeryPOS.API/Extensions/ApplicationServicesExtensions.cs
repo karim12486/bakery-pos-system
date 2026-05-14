@@ -37,6 +37,7 @@ public static class ApplicationServicesExtensions
         services.AddScoped<IShiftService, ShiftService>();
         services.AddScoped<IOrderService, OrderService>();
         services.AddScoped<IBranchService, BranchService>();
+        services.AddScoped<ITenantSignupService, TenantSignupService>();
         services.AddScoped<ISettingsService, SettingsService>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IIdempotencyService, IdempotencyService>();
