@@ -26,12 +26,14 @@ public sealed class SalesService : ISalesService
     private readonly AppDbContext _context;
     private readonly IMapper _mapper;
     private readonly IValidator<SaleForCreateDto> _createValidator;
+    private readonly IAuditService _audit;
 
-    public SalesService(AppDbContext context, IMapper mapper, IValidator<SaleForCreateDto> createValidator)
+    public SalesService(AppDbContext context, IMapper mapper, IValidator<SaleForCreateDto> createValidator, IAuditService audit)
     {
         _context = context;
         _mapper = mapper;
         _createValidator = createValidator;
+        _audit = audit;
     }
 
     public async Task<PagedResponse<SaleListDto>> ListAsync(
@@ -206,6 +208,9 @@ public sealed class SalesService : ISalesService
 
         await _context.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+
+        await _audit.LogAsync(AuditActions.SaleCreated, "Sale", newSale.Id,
+            $"order={newOrder.Id};final={finalAmount};method={dto.PaymentMethod};owed={amountOwed}", ct: ct);
 
         return new SaleCreatedDto(newSale.Id, changeGiven);
     }

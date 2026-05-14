@@ -69,7 +69,7 @@ public class SalesServiceTests
     public async Task CreateAsync_HappyPath_DecrementsStockAndReturnsSaleId()
     {
         var (ctx, cashier, product) = await SeedAsync();
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator());
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService());
 
         var dto = new SaleForCreateDto
         {
@@ -97,7 +97,7 @@ public class SalesServiceTests
     public async Task CreateAsync_CashOverpayment_ReturnsChange()
     {
         var (ctx, cashier, product) = await SeedAsync();
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator());
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService());
 
         var dto = new SaleForCreateDto
         {
@@ -118,7 +118,7 @@ public class SalesServiceTests
     public async Task CreateAsync_InsufficientStock_ThrowsDomainConflict()
     {
         var (ctx, cashier, product) = await SeedAsync(); // stock = 5
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator());
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService());
 
         var dto = new SaleForCreateDto
         {
@@ -139,7 +139,7 @@ public class SalesServiceTests
     public async Task CreateAsync_PartialCashWithoutCustomer_ThrowsDomainException()
     {
         var (ctx, cashier, product) = await SeedAsync();
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator());
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService());
 
         // Cash payment less than total + no customer → service refuses to record the debt.
         var dto = new SaleForCreateDto
@@ -161,7 +161,7 @@ public class SalesServiceTests
     public async Task CreateAsync_UnknownProduct_ThrowsDomainException()
     {
         var (ctx, cashier, _) = await SeedAsync();
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator());
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService());
 
         var dto = new SaleForCreateDto
         {
@@ -182,7 +182,7 @@ public class SalesServiceTests
     public async Task CreateAsync_EmptySaleDetails_FailsValidation()
     {
         var (ctx, cashier, _) = await SeedAsync();
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator());
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService());
 
         var dto = new SaleForCreateDto
         {

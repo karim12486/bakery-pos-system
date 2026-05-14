@@ -35,6 +35,8 @@ namespace BakeryPOS.API.Data
         public DbSet<OrderItem> OrderItems { get; set; }
         public DbSet<Shift> Shifts { get; set; }
         public DbSet<UserBranchRole> UserBranchRoles { get; set; }
+        public DbSet<Setting> Settings { get; set; }
+        public DbSet<AuditLog> AuditLogs { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -91,6 +93,25 @@ namespace BakeryPOS.API.Data
             modelBuilder.Entity<Shift>().HasIndex(x => new { x.TenantId, x.BranchId, x.UserId, x.ClosedAt });
             modelBuilder.Entity<UserBranchRole>()
                 .HasIndex(x => new { x.TenantId, x.UserId, x.BranchId }).IsUnique();
+
+            modelBuilder.Entity<Setting>(e =>
+            {
+                e.Property(x => x.Key).HasMaxLength(120).IsRequired();
+                e.Property(x => x.Value).HasMaxLength(4000).IsRequired();
+                e.HasIndex(x => new { x.TenantId, x.Key }).IsUnique();
+            });
+
+            modelBuilder.Entity<AuditLog>(e =>
+            {
+                e.Property(x => x.Username).HasMaxLength(50);
+                e.Property(x => x.Action).HasMaxLength(80).IsRequired();
+                e.Property(x => x.EntityType).HasMaxLength(60);
+                e.Property(x => x.Details).HasColumnType("nvarchar(max)");
+                e.Property(x => x.IpAddress).HasMaxLength(45); // IPv6 max
+                e.HasIndex(x => new { x.TenantId, x.At });
+                e.HasIndex(x => new { x.TenantId, x.Action });
+                e.HasIndex(x => new { x.TenantId, x.EntityType, x.EntityId });
+            });
             modelBuilder.Entity<UserBranchRole>(e =>
             {
                 e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId)
@@ -169,6 +190,8 @@ namespace BakeryPOS.API.Data
             modelBuilder.Entity<OrderItem>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<Shift>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<UserBranchRole>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<Setting>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<AuditLog>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             // Tenants table itself is NOT filtered — it's the source of truth for tenant lookup
             // (login flow, admin operations).
         }

@@ -30,12 +30,14 @@ public sealed class AdminService : IAdminService
     private readonly AppDbContext _context;
     private readonly IPasswordService _passwordService;
     private readonly IMapper _mapper;
+    private readonly IAuditService _audit;
 
-    public AdminService(AppDbContext context, IPasswordService passwordService, IMapper mapper)
+    public AdminService(AppDbContext context, IPasswordService passwordService, IMapper mapper, IAuditService audit)
     {
         _context = context;
         _passwordService = passwordService;
         _mapper = mapper;
+        _audit = audit;
     }
 
     public async Task<PagedResponse<UserDetailDto>> ListUsersAsync(string? search, PaginationParams pagination, CancellationToken ct)
@@ -77,6 +79,9 @@ public sealed class AdminService : IAdminService
 
         await _context.Users.AddAsync(newUser, ct);
         await _context.SaveChangesAsync(ct);
+
+        await _audit.LogAsync(AuditActions.UserCreated, "User", newUser.Id,
+            $"username={newUser.Username};permissions={(int)newUser.Permissions}", ct: ct);
     }
 
     public async Task UpdateUserAsync(int id, UserForUpdateDto dto, string currentUsername, CancellationToken ct)
@@ -113,8 +118,15 @@ public sealed class AdminService : IAdminService
                     "Au moins un utilisateur actif doit conserver la permission de gestion des utilisateurs.");
         }
 
+        var oldPerms = (int)user.Permissions;
         _mapper.Map(dto, user);
         await _context.SaveChangesAsync(ct);
+
+        if (oldPerms != (int)user.Permissions || isSelf == false)
+        {
+            await _audit.LogAsync(AuditActions.UserPermissionsChanged, "User", user.Id,
+                $"perms_before={oldPerms};perms_after={(int)user.Permissions};isActive={user.IsActive}", ct: ct);
+        }
     }
 
     public async Task DeactivateUserAsync(int id, string currentUsername, CancellationToken ct)
@@ -127,6 +139,7 @@ public sealed class AdminService : IAdminService
 
         user.IsActive = false;
         await _context.SaveChangesAsync(ct);
+        await _audit.LogAsync(AuditActions.UserDeactivated, "User", user.Id, $"username={user.Username}", ct: ct);
     }
 
     public async Task ResetPasswordAsync(int id, ResetPasswordDto dto, CancellationToken ct)

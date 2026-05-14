@@ -19,10 +19,12 @@ public interface IShiftService
 public sealed class ShiftService : IShiftService
 {
     private readonly AppDbContext _context;
+    private readonly IAuditService _audit;
 
-    public ShiftService(AppDbContext context)
+    public ShiftService(AppDbContext context, IAuditService audit)
     {
         _context = context;
+        _audit = audit;
     }
 
     public async Task<ShiftDto> OpenAsync(OpenShiftDto dto, string username, CancellationToken ct)
@@ -57,6 +59,9 @@ public sealed class ShiftService : IShiftService
 
         _context.Shifts.Add(shift);
         await _context.SaveChangesAsync(ct);
+
+        await _audit.LogAsync(AuditActions.ShiftOpened, "Shift", shift.Id,
+            $"openingFloat={shift.OpeningFloat};branch={shift.BranchId}", ct: ct);
 
         return Map(shift, user.FullName);
     }
@@ -112,6 +117,15 @@ public sealed class ShiftService : IShiftService
         shift.VarianceNotes = dto.VarianceNotes;
 
         await _context.SaveChangesAsync(ct);
+
+        // Variance audit-log entry — only when the cashier was off by more than 1 unit of currency,
+        // which is the threshold where a manager wants to investigate.
+        if (Math.Abs(variance) >= 1m)
+        {
+            await _audit.LogAsync(AuditActions.ShiftClosedWithVariance, "Shift", shift.Id,
+                $"expected={expectedCash};counted={dto.ClosingCount};variance={variance};notes={dto.VarianceNotes}",
+                ct: ct);
+        }
 
         return new ZReportDto
         {
