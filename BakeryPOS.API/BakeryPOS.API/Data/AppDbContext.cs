@@ -33,6 +33,7 @@ namespace BakeryPOS.API.Data
         public DbSet<IdempotencyRecord> IdempotencyRecords { get; set; }
         public DbSet<Order> Orders { get; set; }
         public DbSet<OrderItem> OrderItems { get; set; }
+        public DbSet<Shift> Shifts { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -86,6 +87,15 @@ namespace BakeryPOS.API.Data
             modelBuilder.Entity<RemovalRequest>().HasIndex(x => new { x.TenantId, x.BranchId });
             modelBuilder.Entity<Order>().HasIndex(x => new { x.TenantId, x.BranchId, x.OpenedAt });
             modelBuilder.Entity<OrderItem>().HasIndex(x => new { x.TenantId, x.OrderId });
+            modelBuilder.Entity<Shift>().HasIndex(x => new { x.TenantId, x.BranchId, x.UserId, x.ClosedAt });
+
+            // Shift shape
+            modelBuilder.Entity<Shift>(e =>
+            {
+                e.Property(x => x.VarianceNotes).HasMaxLength(500);
+                e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
 
             // Order shape
             modelBuilder.Entity<Order>(e =>
@@ -147,6 +157,7 @@ namespace BakeryPOS.API.Data
             modelBuilder.Entity<IdempotencyRecord>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<Order>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<OrderItem>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<Shift>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             // Tenants table itself is NOT filtered — it's the source of truth for tenant lookup
             // (login flow, admin operations).
         }
