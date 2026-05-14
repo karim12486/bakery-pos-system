@@ -27,11 +27,12 @@ namespace BakeryPOS.API.Services
             _lifetimeHours = config.GetValue<int?>("AppSettings:TokenLifetimeHours") ?? 12;
         }
 
-        public string CreateToken(User user)
+        public string CreateToken(User user, int? branchId = null)
         {
             // NameId stays as the username for backwards-compat with controllers
             // that read ClaimTypes.NameIdentifier. uid carries the numeric user id.
             // tenant_id is the multi-tenant scope — CurrentTenant reads it on every request.
+            // branch_id, when present, narrows the scope further (set after Branch Select).
             var claims = new List<Claim>
             {
                 new Claim(JwtRegisteredClaimNames.NameId, user.Username),
@@ -43,6 +44,11 @@ namespace BakeryPOS.API.Services
                 new Claim("permissions", ((int)user.Permissions).ToString()),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };
+
+            if (branchId.HasValue)
+            {
+                claims.Add(new Claim("branch_id", branchId.Value.ToString()));
+            }
 
             var creds = new SigningCredentials(_key, SecurityAlgorithms.HmacSha512Signature);
 
