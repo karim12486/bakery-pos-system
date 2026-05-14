@@ -1,0 +1,83 @@
+using BakeryPOS.API.Common.Hangfire;
+using BakeryPOS.API.Services.Jobs;
+using Hangfire;
+using Hangfire.SqlServer;
+
+namespace BakeryPOS.API.Extensions;
+
+public static class HangfireExtensions
+{
+    /// <summary>
+    /// Registers Hangfire on top of SQL Server. Hangfire creates its own <c>HangFire</c>
+    /// schema in the same DB on first connect — no manual migration needed. The job runner
+    /// (server) is registered as a hosted service that pulls jobs from the queue.
+    /// </summary>
+    public static IServiceCollection AddBakeryPosHangfire(this IServiceCollection services, IConfiguration config)
+    {
+        var connectionString = config.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException(
+                "ConnectionStrings:DefaultConnection is required for Hangfire SQL storage.");
+
+        services.AddHangfire(cfg => cfg
+            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+            .UseSimpleAssemblyNameTypeSerializer()
+            .UseRecommendedSerializerSettings()
+            .UseSqlServerStorage(connectionString, new SqlServerStorageOptions
+            {
+                CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
+                SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
+                QueuePollInterval = TimeSpan.Zero,             // event-driven, no polling churn
+                UseRecommendedIsolationLevel = true,
+                DisableGlobalLocks = true                       // safe with the SQL Server provider
+            }));
+
+        // The Hangfire server is the process that actually executes jobs. WebJobs / sidecar
+        // deployment can run this server separately with the same connection string and
+        // process the same queue.
+        services.AddHangfireServer(options =>
+        {
+            options.WorkerCount = Environment.ProcessorCount * 2;
+            options.ServerName = $"{Environment.MachineName}:nizam";
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Mounts the Hangfire dashboard at <c>/hangfire</c>, gated behind
+    /// <see cref="HangfireDashboardAuthFilter"/> (authenticated + ManageUsers permission).
+    /// </summary>
+    public static WebApplication UseBakeryPosHangfireDashboard(this WebApplication app)
+    {
+        app.UseHangfireDashboard("/hangfire", new DashboardOptions
+        {
+            Authorization = new[] { new HangfireDashboardAuthFilter() },
+            DisplayStorageConnectionString = false,
+            DashboardTitle = "Nizam Jobs"
+        });
+        return app;
+    }
+
+    /// <summary>
+    /// Registers the recurring schedule for our jobs. Idempotent — calling on every startup
+    /// upserts the schedule by job id. Crons are UTC (Hangfire default for new schedules).
+    /// </summary>
+    public static WebApplication ScheduleBakeryPosRecurringJobs(this WebApplication app)
+    {
+        var recurring = app.Services.GetRequiredService<IRecurringJobManager>();
+
+        recurring.AddOrUpdate<DatabaseBackupJob>(
+            DatabaseBackupJob.RecurringJobId,
+            j => j.RunAsync(CancellationToken.None),
+            DatabaseBackupJob.Cron,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+        recurring.AddOrUpdate<DailyReportsJob>(
+            DailyReportsJob.RecurringJobId,
+            j => j.RunAsync(CancellationToken.None),
+            DailyReportsJob.Cron,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+        return app;
+    }
+}

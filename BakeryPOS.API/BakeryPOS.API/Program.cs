@@ -15,15 +15,21 @@ builder.Services
     .AddBakeryPosRealtime()
     .AddBakeryPosRateLimiting(builder.Configuration)
     .AddBakeryPosApi()
-    .AddBakeryPosHealthChecks();
+    .AddBakeryPosHealthChecks()
+    .AddBakeryPosHangfire(builder.Configuration);
 
 var app = builder.Build();
 
 // Apply migrations + seed admin (idempotent).
 await app.SeedDatabaseAsync();
 
+// Hangfire schedule — upsert by job id, runs on every startup so missing schedules are
+// recovered (e.g. after a fresh deploy or a Hangfire schema reset).
+app.ScheduleBakeryPosRecurringJobs();
+
 // Request pipeline + endpoint mapping.
 app.UseBakeryPosPipeline();
+app.UseBakeryPosHangfireDashboard();
 app.MapBakeryPosEndpoints();
 app.UseBakeryPosLocalization();
 

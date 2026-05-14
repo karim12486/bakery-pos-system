@@ -1,6 +1,7 @@
 using BakeryPOS.API.Common.Idempotency;
 using BakeryPOS.API.Core.Interfaces;
 using BakeryPOS.API.Services;
+using BakeryPOS.API.Services.Jobs;
 
 namespace BakeryPOS.API.Extensions;
 
@@ -45,9 +46,11 @@ public static class ApplicationServicesExtensions
         // Outbound HTTP (used by the Telegram notifier; pooled by the framework)
         services.AddHttpClient();
 
-        // Background workers
-        services.AddHostedService<DatabaseBackupService>();
-        services.AddHostedService<ScheduledReportService>();
+        // Hangfire job CLASSES (the recurring schedule is set up in HangfireExtensions).
+        // Hangfire activates these via DI per execution, so they're registered transient — each
+        // job invocation gets a fresh instance with fresh AppDbContext.
+        services.AddTransient<DatabaseBackupJob>();
+        services.AddTransient<DailyReportsJob>();
 
         return services;
     }
