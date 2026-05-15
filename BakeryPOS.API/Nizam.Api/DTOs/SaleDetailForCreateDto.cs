@@ -10,5 +10,10 @@ namespace Nizam.Api.DTOs
         [Required]
         [Range(1, 1000, ErrorMessage = "Quantity must be at least 1.")]
         public int Quantity { get; set; }
+
+        /// <summary>Selected modifier ids for this line. Empty / null = no modifiers, treated
+        /// as legitimate only if every required group on the product also has MinSelect = 0.
+        /// Validation happens server-side in <c>ModifierApplicationService</c>.</summary>
+        public IReadOnlyList<int>? ModifierIds { get; set; }
     }
 }

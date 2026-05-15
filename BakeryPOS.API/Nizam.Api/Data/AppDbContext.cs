@@ -48,6 +48,10 @@ namespace Nizam.Api.Data
         public DbSet<Modifier> Modifiers { get; set; }
         public DbSet<ProductModifierGroup> ProductModifierGroups { get; set; }
 
+        /// <summary>Per-order-item snapshots of selected modifiers. Replaces the legacy
+        /// <c>OrderItem.Modifiers</c> JSON column as the source of truth.</summary>
+        public DbSet<OrderItemModifier> OrderItemModifiers { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -232,6 +236,16 @@ namespace Nizam.Api.Data
                 e.HasIndex(x => new { x.TenantId, x.ProductId, x.ModifierGroupId }).IsUnique();
                 e.HasIndex(x => new { x.TenantId, x.ProductId, x.SortOrder });
             });
+            modelBuilder.Entity<OrderItemModifier>(e =>
+            {
+                e.Property(x => x.GroupName).HasMaxLength(120).IsRequired();
+                e.Property(x => x.Name).HasMaxLength(120).IsRequired();
+                e.Property(x => x.PriceDelta).HasColumnType("decimal(18,2)");
+                // Cascade with the parent order item — deleting the item deletes its snapshots.
+                e.HasOne(x => x.OrderItem).WithMany(o => o.AppliedModifiers).HasForeignKey(x => x.OrderItemId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasIndex(x => new { x.TenantId, x.OrderItemId });
+            });
 
             // ---- Global query filters: every query is automatically scoped by TenantId. ----
             // CLOSED filter: when _currentTenant.TenantId is null, the predicate `x.TenantId == null`
@@ -265,6 +279,7 @@ namespace Nizam.Api.Data
             modelBuilder.Entity<ModifierGroup>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<Modifier>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<ProductModifierGroup>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<OrderItemModifier>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             // Tenants + Plans + PlanFeatures + PlanLimits are NOT filtered — they're tenant-agnostic
             // master data (login flow, plan lookup, admin operations).
         }

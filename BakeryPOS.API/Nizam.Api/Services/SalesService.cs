@@ -27,13 +27,20 @@ public sealed class SalesService : ISalesService
     private readonly IMapper _mapper;
     private readonly IValidator<SaleForCreateDto> _createValidator;
     private readonly IAuditService _audit;
+    private readonly IModifierApplicationService _modifierApp;
 
-    public SalesService(AppDbContext context, IMapper mapper, IValidator<SaleForCreateDto> createValidator, IAuditService audit)
+    public SalesService(
+        AppDbContext context,
+        IMapper mapper,
+        IValidator<SaleForCreateDto> createValidator,
+        IAuditService audit,
+        IModifierApplicationService modifierApp)
     {
         _context = context;
         _mapper = mapper;
         _createValidator = createValidator;
         _audit = audit;
+        _modifierApp = modifierApp;
     }
 
     public async Task<PagedResponse<SaleListDto>> ListAsync(
@@ -99,12 +106,26 @@ public sealed class SalesService : ISalesService
             .Where(p => productIds.Contains(p.Id))
             .ToDictionaryAsync(p => p.Id, ct);
 
+        // Per-line preparation: validate modifier selections + compute price-per-unit including
+        // modifier deltas + materialise snapshot rows. Done once, indexed by line position so the
+        // create loop below stays a single pass over dto.SaleDetails.
+        var linePrep = new List<LinePreparation>(dto.SaleDetails.Count);
         decimal totalAmount = 0;
         foreach (var item in dto.SaleDetails)
         {
             if (!products.TryGetValue(item.ProductId, out var product))
                 throw new DomainException("ERR_PRODUCT_NOT_FOUND", $"Produit avec l'ID {item.ProductId} introuvable.");
-            totalAmount += product.Price * item.Quantity;
+
+            var modifierResult = await _modifierApp.PrepareAsync(
+                item.ProductId,
+                (IReadOnlyCollection<int>?)item.ModifierIds ?? Array.Empty<int>(),
+                ct);
+
+            var unitPrice = product.Price + modifierResult.TotalPriceDelta;
+            var lineTotal = unitPrice * item.Quantity;
+
+            linePrep.Add(new LinePreparation(item, product, unitPrice, lineTotal, modifierResult.Snapshots));
+            totalAmount += lineTotal;
         }
 
         // Customer + discount.
@@ -177,16 +198,17 @@ public sealed class SalesService : ISalesService
         await _context.Sales.AddAsync(newSale, ct);
 
         // Stock decrement + ledger entries + OrderItem mirror.
-        foreach (var item in dto.SaleDetails)
+        foreach (var prep in linePrep)
         {
-            var product = products[item.ProductId];
+            var item = prep.Item;
+            var product = prep.Product;
             if (product.StockQuantity < item.Quantity)
                 throw new DomainConflictException("ERR_INSUFFICIENT_STOCK", $"Stock insuffisant pour {product.Name}.");
 
             product.StockQuantity -= item.Quantity;
-            var lineTotal = product.Price * item.Quantity;
 
-            // Legacy SaleDetail — kept during the transition.
+            // Legacy SaleDetail — kept during the transition. UnitPrice excludes modifier
+            // deltas (legacy contract); the new OrderItem carries the modifier-inclusive price.
             await _context.SaleDetails.AddAsync(new SaleDetail
             {
                 ProductId = product.Id,
@@ -195,18 +217,21 @@ public sealed class SalesService : ISalesService
                 Sale = newSale
             }, ct);
 
-            // New OrderItem — canonical going forward.
-            await _context.OrderItems.AddAsync(new OrderItem
+            // New OrderItem — canonical going forward. UnitPrice INCLUDES modifier deltas
+            // so receipts and reports see the price the customer actually paid per unit.
+            var orderItem = new OrderItem
             {
                 Order = newOrder,
                 ProductId = product.Id,
                 Quantity = item.Quantity,
-                UnitPrice = product.Price,
-                LineTotal = lineTotal,
+                UnitPrice = prep.UnitPrice,
+                LineTotal = prep.LineTotal,
                 TaxAmount = 0,
-                Modifiers = "[]",
+                Modifiers = "[]", // legacy column stays empty — snapshots live in AppliedModifiers
                 Status = OrderItemStatus.Closed
-            }, ct);
+            };
+            foreach (var snap in prep.ModifierSnapshots) orderItem.AppliedModifiers.Add(snap);
+            await _context.OrderItems.AddAsync(orderItem, ct);
 
             await _context.StockMovements.AddAsync(new StockMovement
             {
@@ -226,6 +251,16 @@ public sealed class SalesService : ISalesService
 
         return new SaleCreatedDto(newSale.Id, changeGiven);
     }
+
+    /// <summary>Per-line working record built once during preparation and reused in the
+    /// create loop. Carries the product, the modifier-inclusive unit price + line total,
+    /// and the materialised snapshot rows to attach to the new <see cref="OrderItem"/>.</summary>
+    private sealed record LinePreparation(
+        SaleDetailForCreateDto Item,
+        Product Product,
+        decimal UnitPrice,
+        decimal LineTotal,
+        IReadOnlyList<OrderItemModifier> ModifierSnapshots);
 
     private static (decimal cashPaid, decimal cardPaid, decimal totalPaidNow, decimal changeGiven)
         SplitPayment(SaleForCreateDto dto, decimal finalAmount)

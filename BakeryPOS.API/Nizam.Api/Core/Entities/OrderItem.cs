@@ -37,10 +37,15 @@ public class OrderItem
     [Column(TypeName = "decimal(18, 2)")]
     public decimal TaxAmount { get; set; }
 
-    /// <summary>JSON array of modifier choices (e.g. <c>[{"id":12,"name":"No Ice","priceDelta":0}]</c>).
-    /// Always empty in Phase A; populated in Phase B by the modifier picker.</summary>
+    /// <summary>Legacy JSON column — superseded by <see cref="AppliedModifiers"/>. New code writes
+    /// to the child table; this column stays at <c>"[]"</c> on new orders. Kept as a column for
+    /// schema compatibility with historical rows; a future cleanup branch may drop it.</summary>
     [Column(TypeName = "nvarchar(max)")]
     public string Modifiers { get; set; } = "[]";
+
+    /// <summary>Snapshotted modifier choices for this item. Source of truth for receipt rendering
+    /// and reporting. See <see cref="OrderItemModifier"/> for the snapshot contract.</summary>
+    public ICollection<OrderItemModifier> AppliedModifiers { get; set; } = new List<OrderItemModifier>();
 
     /// <summary>Kitchen-side state. Phase A items go straight to <c>Closed</c>.</summary>
     public OrderItemStatus Status { get; set; } = OrderItemStatus.Closed;

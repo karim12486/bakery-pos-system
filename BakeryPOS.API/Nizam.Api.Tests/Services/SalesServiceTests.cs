@@ -79,7 +79,7 @@ public class SalesServiceTests
     public async Task CreateAsync_HappyPath_DecrementsStockAndReturnsSaleId()
     {
         var (ctx, cashier, product) = await SeedAsync();
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService());
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx));
 
         var dto = new SaleForCreateDto
         {
@@ -107,7 +107,7 @@ public class SalesServiceTests
     public async Task CreateAsync_CashOverpayment_ReturnsChange()
     {
         var (ctx, cashier, product) = await SeedAsync();
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService());
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx));
 
         var dto = new SaleForCreateDto
         {
@@ -128,7 +128,7 @@ public class SalesServiceTests
     public async Task CreateAsync_InsufficientStock_ThrowsDomainConflict()
     {
         var (ctx, cashier, product) = await SeedAsync(); // stock = 5
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService());
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx));
 
         var dto = new SaleForCreateDto
         {
@@ -149,7 +149,7 @@ public class SalesServiceTests
     public async Task CreateAsync_PartialCashWithoutCustomer_ThrowsDomainException()
     {
         var (ctx, cashier, product) = await SeedAsync();
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService());
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx));
 
         // Cash payment less than total + no customer → service refuses to record the debt.
         var dto = new SaleForCreateDto
@@ -171,7 +171,7 @@ public class SalesServiceTests
     public async Task CreateAsync_UnknownProduct_ThrowsDomainException()
     {
         var (ctx, cashier, _) = await SeedAsync();
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService());
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx));
 
         var dto = new SaleForCreateDto
         {
@@ -192,7 +192,7 @@ public class SalesServiceTests
     public async Task CreateAsync_EmptySaleDetails_FailsValidation()
     {
         var (ctx, cashier, _) = await SeedAsync();
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService());
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx));
 
         var dto = new SaleForCreateDto
         {
@@ -233,7 +233,7 @@ public class SalesServiceTests
         await ctx.SaveChangesAsync();
         // (no Shift added)
 
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService());
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx));
         var dto = new SaleForCreateDto
         {
             PaymentMethod = PaymentType.Cash,
@@ -247,5 +247,101 @@ public class SalesServiceTests
         var ex = await Assert.ThrowsAsync<DomainConflictException>(
             () => svc.CreateAsync(dto, cashier.Username, CancellationToken.None));
         Assert.Equal("ERR_NO_OPEN_SHIFT", ex.ErrorCode);
+    }
+
+    // ===== Modifier integration ======================================================
+
+    [Fact]
+    public async Task CreateAsync_WithModifiers_PersistsSnapshots_AndIncludesDeltaInLineTotal()
+    {
+        var (ctx, cashier, product) = await SeedAsync();
+
+        // Attach a Size group (required, pick 1: Large +18) to the product.
+        var size = new ModifierGroup
+        {
+            Name = "Size", MinSelect = 1, MaxSelect = 1, IsActive = true,
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+        };
+        ctx.ModifierGroups.Add(size);
+        await ctx.SaveChangesAsync();
+        var large = new Modifier
+        {
+            ModifierGroupId = size.Id, Name = "Large", PriceDelta = 18m,
+            IsActive = true, CreatedAt = DateTime.UtcNow,
+        };
+        ctx.Modifiers.Add(large);
+        await ctx.SaveChangesAsync();
+        ctx.ProductModifierGroups.Add(new ProductModifierGroup
+        {
+            ProductId = product.Id, ModifierGroupId = size.Id, SortOrder = 0,
+        });
+        await ctx.SaveChangesAsync();
+
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(),
+            new NoOpAuditService(), new ModifierApplicationService(ctx));
+
+        // 2 × (10 base + 18 Large) = 56. Pay 60 exact-ish → expect 4 EGP change.
+        var dto = new SaleForCreateDto
+        {
+            PaymentMethod = PaymentType.Cash,
+            AmountPaid = 60m,
+            SaleDetails = new List<SaleDetailForCreateDto>
+            {
+                new() { ProductId = product.Id, Quantity = 2, ModifierIds = new[] { large.Id } }
+            }
+        };
+
+        var result = await svc.CreateAsync(dto, cashier.Username, CancellationToken.None);
+        Assert.True(result.SaleId > 0);
+        Assert.Equal(4m, result.Change);
+
+        var orderItem = await ctx.OrderItems.Include(oi => oi.AppliedModifiers).SingleAsync();
+        Assert.Equal(28m, orderItem.UnitPrice);          // 10 base + 18 delta
+        Assert.Equal(56m, orderItem.LineTotal);          // 2 × 28
+        Assert.Single(orderItem.AppliedModifiers);
+        var snap = orderItem.AppliedModifiers.First();
+        Assert.Equal("Size", snap.GroupName);
+        Assert.Equal("Large", snap.Name);
+        Assert.Equal(18m, snap.PriceDelta);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithRequiredGroupMissing_Throws_AndNothingPersisted()
+    {
+        var (ctx, cashier, product) = await SeedAsync();
+
+        var size = new ModifierGroup
+        {
+            Name = "Size", MinSelect = 1, MaxSelect = 1, IsActive = true,
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+        };
+        ctx.ModifierGroups.Add(size);
+        await ctx.SaveChangesAsync();
+        ctx.ProductModifierGroups.Add(new ProductModifierGroup
+        {
+            ProductId = product.Id, ModifierGroupId = size.Id, SortOrder = 0,
+        });
+        await ctx.SaveChangesAsync();
+
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(),
+            new NoOpAuditService(), new ModifierApplicationService(ctx));
+
+        var dto = new SaleForCreateDto
+        {
+            PaymentMethod = PaymentType.Cash,
+            AmountPaid = 30m,
+            SaleDetails = new List<SaleDetailForCreateDto>
+            {
+                new() { ProductId = product.Id, Quantity = 1 } // no ModifierIds — Size required
+            }
+        };
+
+        var ex = await Assert.ThrowsAsync<DomainException>(
+            () => svc.CreateAsync(dto, cashier.Username, CancellationToken.None));
+        Assert.Equal("ERR_MODIFIER_MIN_NOT_MET", ex.ErrorCode);
+
+        // No partial persistence — validation runs before any tx begins.
+        Assert.Equal(0, await ctx.Sales.CountAsync());
+        Assert.Equal(0, await ctx.OrderItems.CountAsync());
     }
 }
