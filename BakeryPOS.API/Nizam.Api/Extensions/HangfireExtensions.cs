@@ -8,12 +8,27 @@ namespace Nizam.Api.Extensions;
 public static class HangfireExtensions
 {
     /// <summary>
+    /// Hosting environment name used by the integration test factory. When the app runs in this
+    /// environment, every Hangfire entry point in this class becomes a no-op — registration,
+    /// recurring-job scheduling, and the dashboard endpoint are all skipped so tests don't
+    /// need a SQL Server (Hangfire's <c>RecurringJobManager.AddOrUpdate</c> acquires a SQL
+    /// distributed lock, which throws when the configured connection string isn't reachable).
+    /// </summary>
+    public const string TestingEnvironment = "Testing";
+
+    /// <summary>
     /// Registers Hangfire on top of SQL Server. Hangfire creates its own <c>HangFire</c>
     /// schema in the same DB on first connect — no manual migration needed. The job runner
     /// (server) is registered as a hosted service that pulls jobs from the queue.
+    ///
+    /// <para>Becomes a no-op in the <see cref="TestingEnvironment"/> environment so
+    /// integration tests can start the host without SQL Server.</para>
     /// </summary>
-    public static IServiceCollection AddNizamHangfire(this IServiceCollection services, IConfiguration config)
+    public static IServiceCollection AddNizamHangfire(
+        this IServiceCollection services, IConfiguration config, IHostEnvironment env)
     {
+        if (env.IsEnvironment(TestingEnvironment)) return services;
+
         var connectionString = config.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException(
                 "ConnectionStrings:DefaultConnection is required for Hangfire SQL storage.");
@@ -46,9 +61,13 @@ public static class HangfireExtensions
     /// <summary>
     /// Mounts the Hangfire dashboard at <c>/hangfire</c>, gated behind
     /// <see cref="HangfireDashboardAuthFilter"/> (authenticated + ManageUsers permission).
+    ///
+    /// <para>No-op in the <see cref="TestingEnvironment"/> environment.</para>
     /// </summary>
     public static WebApplication UseNizamHangfireDashboard(this WebApplication app)
     {
+        if (app.Environment.IsEnvironment(TestingEnvironment)) return app;
+
         app.UseHangfireDashboard("/hangfire", new DashboardOptions
         {
             Authorization = new[] { new HangfireDashboardAuthFilter() },
@@ -61,9 +80,13 @@ public static class HangfireExtensions
     /// <summary>
     /// Registers the recurring schedule for our jobs. Idempotent — calling on every startup
     /// upserts the schedule by job id. Crons are UTC (Hangfire default for new schedules).
+    ///
+    /// <para>No-op in the <see cref="TestingEnvironment"/> environment.</para>
     /// </summary>
     public static WebApplication ScheduleNizamRecurringJobs(this WebApplication app)
     {
+        if (app.Environment.IsEnvironment(TestingEnvironment)) return app;
+
         var recurring = app.Services.GetRequiredService<IRecurringJobManager>();
 
         recurring.AddOrUpdate<DatabaseBackupJob>(

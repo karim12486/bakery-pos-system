@@ -29,7 +29,13 @@ namespace Nizam.Api.Data.Seed
             ILogger logger,
             string contentRootPath)
         {
-            await context.Database.MigrateAsync();
+            // Relational providers (SQL Server in production) get real migrations. Non-relational
+            // providers (EF in-memory used by integration tests) don't support MigrateAsync, so
+            // we EnsureCreated instead — same end-state (schema exists, ready for seed).
+            if (context.Database.IsRelational())
+                await context.Database.MigrateAsync();
+            else
+                await context.Database.EnsureCreatedAsync();
 
             // 0. Subscription plan catalog. Must run before any Tenant create so the
             //    Tenants.PlanCode FK can be satisfied. Idempotent upsert.

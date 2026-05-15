@@ -10,17 +10,33 @@ namespace Nizam.Api.Extensions;
 public static class PersistenceExtensions
 {
     /// <summary>
+    /// Hosting environment name used by the integration test factory. When the app runs in
+    /// this environment, the production SQL Server <see cref="AppDbContext"/> registration is
+    /// skipped so the test factory can register an in-memory replacement — EF Core refuses to
+    /// have two providers registered for the same DbContext.
+    /// </summary>
+    public const string TestingEnvironment = "Testing";
+
+    /// <summary>
     /// Registers the EF Core <see cref="AppDbContext"/> against the configured SQL Server connection,
     /// plus AutoMapper profiles from this assembly.
+    ///
+    /// <para>In the <see cref="TestingEnvironment"/> environment the SQL Server DbContext
+    /// registration is skipped — the test factory swaps in an in-memory provider. Tenancy
+    /// and AutoMapper stay registered either way.</para>
     /// </summary>
-    public static IServiceCollection AddNizamPersistence(this IServiceCollection services, IConfiguration config)
+    public static IServiceCollection AddNizamPersistence(
+        this IServiceCollection services, IConfiguration config, IHostEnvironment env)
     {
-        var connectionString = config.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException(
-                "ConnectionStrings:DefaultConnection is not configured. " +
-                "Set it via appsettings, environment variable, or user-secrets.");
+        if (!env.IsEnvironment(TestingEnvironment))
+        {
+            var connectionString = config.GetConnectionString("DefaultConnection")
+                ?? throw new InvalidOperationException(
+                    "ConnectionStrings:DefaultConnection is not configured. " +
+                    "Set it via appsettings, environment variable, or user-secrets.");
 
-        services.AddDbContext<AppDbContext>(options => options.UseSqlServer(connectionString));
+            services.AddDbContext<AppDbContext>(options => options.UseSqlServer(connectionString));
+        }
 
         services.AddAutoMapper(cfg =>
         {

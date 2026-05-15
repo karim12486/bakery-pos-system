@@ -29,9 +29,13 @@ namespace Nizam.Api.Tests
             using (var scope = _factory.Services.CreateScope())
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                // Wipe and recreate the REAL database using migrations
+                // Reset the DB to a clean state for this test. EF in-memory used in tests
+                // doesn't support migrations — EnsureCreated is the equivalent operation.
                 await dbContext.Database.EnsureDeletedAsync();
-                await dbContext.Database.MigrateAsync();
+                if (dbContext.Database.IsRelational())
+                    await dbContext.Database.MigrateAsync();
+                else
+                    await dbContext.Database.EnsureCreatedAsync();
             }
         }
 

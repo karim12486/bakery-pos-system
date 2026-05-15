@@ -9,14 +9,14 @@ builder.Host.AddNizamSerilog();
 // testable and trivial to add tenancy / observability hooks to later.
 builder.Services
     .AddNizamCors(builder.Configuration)
-    .AddNizamPersistence(builder.Configuration)
+    .AddNizamPersistence(builder.Configuration, builder.Environment)
     .AddNizamApplicationServices()
     .AddNizamAuthentication(builder.Configuration)
     .AddNizamRealtime()
     .AddNizamRateLimiting(builder.Configuration)
     .AddNizamApi()
     .AddNizamHealthChecks()
-    .AddNizamHangfire(builder.Configuration);
+    .AddNizamHangfire(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
 
