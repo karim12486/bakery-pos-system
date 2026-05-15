@@ -18,11 +18,20 @@ public class DomainException : Exception
     /// <summary>HTTP status to map to. Defaults to 400 Bad Request.</summary>
     public int StatusCode { get; }
 
-    public DomainException(string errorCode, string message, int statusCode = StatusCodes.Status400BadRequest)
+    /// <summary>
+    /// Optional typed extensions added to the ProblemDetails response. Use for machine-readable
+    /// context the frontend needs to render — e.g. <c>requiredFeature</c>, <c>currentPlan</c>,
+    /// <c>maxAllowed</c>. The middleware merges these into the JSON body.
+    /// </summary>
+    public IReadOnlyDictionary<string, object?>? Extensions { get; }
+
+    public DomainException(string errorCode, string message, int statusCode = StatusCodes.Status400BadRequest,
+        IReadOnlyDictionary<string, object?>? extensions = null)
         : base(message)
     {
         ErrorCode = errorCode;
         StatusCode = statusCode;
+        Extensions = extensions;
     }
 }
 

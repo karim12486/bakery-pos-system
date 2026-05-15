@@ -2,6 +2,7 @@ using Nizam.Api.Common.Idempotency;
 using Nizam.Api.Core.Interfaces;
 using Nizam.Api.Services;
 using Nizam.Api.Services.Jobs;
+using Nizam.Api.Services.Plans;
 
 namespace Nizam.Api.Extensions;
 
@@ -42,6 +43,12 @@ public static class ApplicationServicesExtensions
         services.AddScoped<ISettingsService, SettingsService>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IIdempotencyService, IdempotencyService>();
+
+        // Subscription plan service — caches the current tenant's plan/features/limits
+        // for the request scope and shares a process-wide IMemoryCache across requests
+        // (5-min sliding TTL, invalidated on plan change by the super-admin portal).
+        services.AddMemoryCache();
+        services.AddScoped<IPlanService, PlanService>();
 
         // Outbound HTTP (used by the Telegram notifier; pooled by the framework)
         services.AddHttpClient();

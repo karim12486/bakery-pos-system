@@ -35,8 +35,13 @@ public sealed class ProblemDetailsMiddleware
         catch (DomainException ex)
         {
             _logger.LogInformation(ex, "Domain exception {ErrorCode}: {Message}", ex.ErrorCode, ex.Message);
+            var extensions = new Dictionary<string, object?> { ["errorCode"] = ex.ErrorCode };
+            if (ex.Extensions != null)
+            {
+                foreach (var (k, v) in ex.Extensions) extensions[k] = v;
+            }
             await WriteProblem(ctx, ex.StatusCode, title: TitleForStatus(ex.StatusCode), detail: ex.Message,
-                extensions: new Dictionary<string, object?> { ["errorCode"] = ex.ErrorCode });
+                extensions: extensions);
         }
         catch (ValidationException ex)
         {
@@ -94,6 +99,7 @@ public sealed class ProblemDetailsMiddleware
     {
         400 => "Bad request.",
         401 => "Unauthorized.",
+        402 => "Payment required.",
         403 => "Forbidden.",
         404 => "Not found.",
         409 => "Conflict.",
