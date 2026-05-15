@@ -6,6 +6,7 @@ using Nizam.Api.Core.Interfaces;
 using Nizam.Api.Data;
 using Nizam.Api.DTOs;
 using Nizam.Api.DTOs.Shared;
+using Nizam.Api.Services.Plans;
 using Microsoft.EntityFrameworkCore;
 
 namespace Nizam.Api.Services;
@@ -31,13 +32,20 @@ public sealed class AdminService : IAdminService
     private readonly IPasswordService _passwordService;
     private readonly IMapper _mapper;
     private readonly IAuditService _audit;
+    private readonly IPlanService _plans;
 
-    public AdminService(AppDbContext context, IPasswordService passwordService, IMapper mapper, IAuditService audit)
+    public AdminService(
+        AppDbContext context,
+        IPasswordService passwordService,
+        IMapper mapper,
+        IAuditService audit,
+        IPlanService plans)
     {
         _context = context;
         _passwordService = passwordService;
         _mapper = mapper;
         _audit = audit;
+        _plans = plans;
     }
 
     public async Task<PagedResponse<UserDetailDto>> ListUsersAsync(string? search, PaginationParams pagination, CancellationToken ct)
@@ -71,6 +79,11 @@ public sealed class AdminService : IAdminService
     {
         if (await _context.Users.AnyAsync(u => u.Username.ToLower() == dto.Username.ToLower(), ct))
             throw new DomainConflictException("ERR_USERNAME_TAKEN", "Ce nom d'utilisateur est déjà pris.");
+
+        // Plan limit: count ACTIVE users — deactivated users free up a seat (industry-standard
+        // "seats" model). Throws PlanLimitExceededException (402) if at-or-over max_users.
+        var activeUserCount = await _context.Users.CountAsync(u => u.IsActive, ct);
+        await _plans.EnsureWithinLimitAsync("max_users", activeUserCount, ct);
 
         var newUser = _mapper.Map<User>(dto);
         newUser.PasswordHash = _passwordService.HashPassword(dto.Password);

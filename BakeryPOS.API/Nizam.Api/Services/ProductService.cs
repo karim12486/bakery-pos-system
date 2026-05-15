@@ -4,6 +4,7 @@ using Nizam.Api.Core.Entities;
 using Nizam.Api.Data;
 using Nizam.Api.DTOs;
 using Nizam.Api.DTOs.Shared;
+using Nizam.Api.Services.Plans;
 using Microsoft.EntityFrameworkCore;
 
 namespace Nizam.Api.Services;
@@ -22,11 +23,13 @@ public sealed class ProductService : IProductService
 {
     private readonly AppDbContext _context;
     private readonly IMapper _mapper;
+    private readonly IPlanService _plans;
 
-    public ProductService(AppDbContext context, IMapper mapper)
+    public ProductService(AppDbContext context, IMapper mapper, IPlanService plans)
     {
         _context = context;
         _mapper = mapper;
+        _plans = plans;
     }
 
     public async Task<PagedResponse<ProductDto>> ListAsync(int? categoryId, string? search, PaginationParams pagination, CancellationToken ct)
@@ -78,6 +81,11 @@ public sealed class ProductService : IProductService
             throw new DomainConflictException("ERR_BARCODE_DUPLICATE",
                 $"Le code-barres '{dto.Barcode}' est déjà utilisé par un autre produit.");
         }
+
+        // Plan limit: count ACTIVE products — soft-deleted products don't take catalog slots.
+        // Throws PlanLimitExceededException (402) if at-or-over max_products.
+        var activeProductCount = await _context.Products.CountAsync(p => p.IsActive, ct);
+        await _plans.EnsureWithinLimitAsync("max_products", activeProductCount, ct);
 
         var newProduct = _mapper.Map<Product>(dto);
         newProduct.IsActive = true;
