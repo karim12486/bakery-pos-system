@@ -5,6 +5,7 @@ using Nizam.Api.Core.Enums;
 using Nizam.Api.Data;
 using Nizam.Api.DTOs;
 using Nizam.Api.DTOs.Shared;
+using Nizam.Api.Services.Orders;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,19 +29,22 @@ public sealed class SalesService : ISalesService
     private readonly IValidator<SaleForCreateDto> _createValidator;
     private readonly IAuditService _audit;
     private readonly IModifierApplicationService _modifierApp;
+    private readonly IOrderStateMachine _orderStates;
 
     public SalesService(
         AppDbContext context,
         IMapper mapper,
         IValidator<SaleForCreateDto> createValidator,
         IAuditService audit,
-        IModifierApplicationService modifierApp)
+        IModifierApplicationService modifierApp,
+        IOrderStateMachine orderStates)
     {
         _context = context;
         _mapper = mapper;
         _createValidator = createValidator;
         _audit = audit;
         _modifierApp = modifierApp;
+        _orderStates = orderStates;
     }
 
     public async Task<PagedResponse<SaleListDto>> ListAsync(
@@ -157,6 +161,9 @@ public sealed class SalesService : ISalesService
             customer.CurrentBalance -= amountOwed;
 
         // ---- Order envelope (B-aware schema; Phase A creates orders closed-on-arrival) ----
+        // Counter-service shortcut: order opens + closes in the same action. We still route
+        // through IOrderStateMachine to make the lifecycle explicit and to fail fast if a
+        // refactor ever tries to skip a forbidden transition.
         var now = DateTime.UtcNow;
         var newOrder = new Order
         {
@@ -164,17 +171,19 @@ public sealed class SalesService : ISalesService
             CustomerId = dto.CustomerId,
             ShiftId = openShift.Id,        // stamped from the cashier's open shift
             BranchId = openShift.BranchId, // shift's branch IS the order's branch
-            Status = OrderStatus.Closed,
+            Status = OrderStatus.Open,
             Channel = OrderChannel.Takeaway,
             TableId = null,
             OpenedAt = now,
-            ClosedAt = now,
             Subtotal = totalAmount,
             DiscountAmount = discountAmount,
             TaxAmount = 0, // Phase A doesn't price-out per-item tax yet
             FinalAmount = finalAmount
             // TenantId auto-stamped
         };
+        _orderStates.AssertTransition(newOrder.Status, OrderStatus.Closed);
+        newOrder.Status = OrderStatus.Closed;
+        newOrder.ClosedAt = now;
         await _context.Orders.AddAsync(newOrder, ct);
 
         // ---- Legacy Sale (the payment record) — points at the Order via OrderId ----

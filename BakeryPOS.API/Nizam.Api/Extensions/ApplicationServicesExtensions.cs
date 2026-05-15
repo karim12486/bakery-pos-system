@@ -2,6 +2,7 @@ using Nizam.Api.Common.Idempotency;
 using Nizam.Api.Core.Interfaces;
 using Nizam.Api.Services;
 using Nizam.Api.Services.Jobs;
+using Nizam.Api.Services.Orders;
 using Nizam.Api.Services.Plans;
 
 namespace Nizam.Api.Extensions;
@@ -45,6 +46,8 @@ public static class ApplicationServicesExtensions
         services.AddScoped<IIdempotencyService, IdempotencyService>();
         services.AddScoped<IModifierGroupService, ModifierGroupService>();
         services.AddScoped<IModifierApplicationService, ModifierApplicationService>();
+        // Order state machine is pure logic; safe as singleton.
+        services.AddSingleton<IOrderStateMachine, OrderStateMachine>();
 
         // Subscription plan service — caches the current tenant's plan/features/limits
         // for the request scope and shares a process-wide IMemoryCache across requests

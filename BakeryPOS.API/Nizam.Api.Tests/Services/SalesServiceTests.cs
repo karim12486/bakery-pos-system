@@ -7,6 +7,7 @@ using Nizam.Api.DTOs;
 using Nizam.Api.DTOs.Validators;
 using Nizam.Api.Mappers;
 using Nizam.Api.Services;
+using Nizam.Api.Services.Orders;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -79,7 +80,7 @@ public class SalesServiceTests
     public async Task CreateAsync_HappyPath_DecrementsStockAndReturnsSaleId()
     {
         var (ctx, cashier, product) = await SeedAsync();
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx));
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx), new OrderStateMachine());
 
         var dto = new SaleForCreateDto
         {
@@ -107,7 +108,7 @@ public class SalesServiceTests
     public async Task CreateAsync_CashOverpayment_ReturnsChange()
     {
         var (ctx, cashier, product) = await SeedAsync();
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx));
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx), new OrderStateMachine());
 
         var dto = new SaleForCreateDto
         {
@@ -128,7 +129,7 @@ public class SalesServiceTests
     public async Task CreateAsync_InsufficientStock_ThrowsDomainConflict()
     {
         var (ctx, cashier, product) = await SeedAsync(); // stock = 5
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx));
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx), new OrderStateMachine());
 
         var dto = new SaleForCreateDto
         {
@@ -149,7 +150,7 @@ public class SalesServiceTests
     public async Task CreateAsync_PartialCashWithoutCustomer_ThrowsDomainException()
     {
         var (ctx, cashier, product) = await SeedAsync();
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx));
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx), new OrderStateMachine());
 
         // Cash payment less than total + no customer → service refuses to record the debt.
         var dto = new SaleForCreateDto
@@ -171,7 +172,7 @@ public class SalesServiceTests
     public async Task CreateAsync_UnknownProduct_ThrowsDomainException()
     {
         var (ctx, cashier, _) = await SeedAsync();
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx));
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx), new OrderStateMachine());
 
         var dto = new SaleForCreateDto
         {
@@ -192,7 +193,7 @@ public class SalesServiceTests
     public async Task CreateAsync_EmptySaleDetails_FailsValidation()
     {
         var (ctx, cashier, _) = await SeedAsync();
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx));
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx), new OrderStateMachine());
 
         var dto = new SaleForCreateDto
         {
@@ -233,7 +234,7 @@ public class SalesServiceTests
         await ctx.SaveChangesAsync();
         // (no Shift added)
 
-        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx));
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(), new NoOpAuditService(), new ModifierApplicationService(ctx), new OrderStateMachine());
         var dto = new SaleForCreateDto
         {
             PaymentMethod = PaymentType.Cash,
@@ -278,7 +279,7 @@ public class SalesServiceTests
         await ctx.SaveChangesAsync();
 
         var svc = new SalesService(ctx, BuildMapper(), BuildValidator(),
-            new NoOpAuditService(), new ModifierApplicationService(ctx));
+            new NoOpAuditService(), new ModifierApplicationService(ctx), new OrderStateMachine());
 
         // 2 × (10 base + 18 Large) = 56. Pay 60 exact-ish → expect 4 EGP change.
         var dto = new SaleForCreateDto
@@ -324,7 +325,7 @@ public class SalesServiceTests
         await ctx.SaveChangesAsync();
 
         var svc = new SalesService(ctx, BuildMapper(), BuildValidator(),
-            new NoOpAuditService(), new ModifierApplicationService(ctx));
+            new NoOpAuditService(), new ModifierApplicationService(ctx), new OrderStateMachine());
 
         var dto = new SaleForCreateDto
         {
