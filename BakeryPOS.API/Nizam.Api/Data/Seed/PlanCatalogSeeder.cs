@@ -73,10 +73,15 @@ public static class PlanCatalogSeeder
         new(
             Code: "pro",
             Name: "Pro",
-            Description: "Restaurants, KDS, tables, full inventory ops, public API, white-label.",
-            MonthlyPriceEgp: 3_499m,
-            AnnualPriceEgp: 34_990m,
+            Description: "Restaurants, KDS, tables, public API, white-label — up to 10 branches.",
+            MonthlyPriceEgp: 2_999m,
+            AnnualPriceEgp: 29_990m,
             SortOrder: 30,
+            // Inventory ops (purchase orders, recipes, COGS, branch transfers, waste log) is
+            // NOT included natively — it's the "Inventory Pack" add-on, purchasable by both
+            // Growth and Pro tenants via TenantFeatureOverride. Phase B restaurant suite
+            // (tables/kds/split_check/reservations/qr_table_menu) STAYS in Pro by default
+            // since it defines the Pro tier's restaurant positioning.
             Features: new[]
             {
                 "multi_branch",
@@ -93,7 +98,6 @@ public static class PlanCatalogSeeder
                 "reservations",
                 "qr_table_menu",
                 "api_access",
-                "inventory_ops",
                 "messaging_notifications",
             },
             Limits: new (string, int)[]
@@ -107,30 +111,55 @@ public static class PlanCatalogSeeder
     };
 
     /// <summary>
-    /// Deprecated feature keys — removed on every startup if found. This is the ONE place
-    /// where the seeder will actively remove a feature grant, used for rename-in-place
-    /// (e.g. <c>whatsapp_notifications</c> → <c>messaging_notifications</c>).
-    /// Do NOT use this to revoke entitlements — that's a customer-facing change requiring
-    /// real comms. Use it only for internal renames where the replacement is already granted.
+    /// Deprecated feature keys — removed from EVERY plan on startup. Use for global renames
+    /// (e.g. <c>whatsapp_notifications</c> → <c>messaging_notifications</c>) where the old
+    /// key is dead everywhere and nothing in code checks for it anymore.
     /// </summary>
     private static readonly string[] DeprecatedFeatureKeys =
     {
         "whatsapp_notifications", // renamed → messaging_notifications (2026-05-15)
     };
 
+    /// <summary>
+    /// Per-plan obsolete grants — removed from the specified plan only. The feature key
+    /// itself stays alive (still checked in code, granted via add-on TenantFeatureOverride),
+    /// but the named plan no longer grants it natively. Used when a feature moves from
+    /// "included in plan X" to "add-on for plan X".
+    /// </summary>
+    private static readonly (string PlanCode, string FeatureKey)[] PlanGrantsToRemove =
+    {
+        // inventory_ops moved out of Pro into the Inventory Pack add-on (2026-05-15).
+        // Customers who want POs/recipes/COGS/transfers now buy the add-on regardless of plan.
+        ("pro", "inventory_ops"),
+    };
+
     public static async Task SeedAsync(AppDbContext context, ILogger logger, CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;
 
-        // Sweep deprecated feature keys before adding the canonical replacements.
-        var stale = await context.PlanFeatures
+        // Sweep #1: globally deprecated feature keys (true renames).
+        var staleGlobal = await context.PlanFeatures
             .Where(f => DeprecatedFeatureKeys.Contains(f.FeatureKey))
             .ToListAsync(ct);
-        if (stale.Count > 0)
+        if (staleGlobal.Count > 0)
         {
-            context.PlanFeatures.RemoveRange(stale);
-            logger.LogInformation("Removed {Count} deprecated PlanFeature rows: {Keys}",
-                stale.Count, string.Join(", ", stale.Select(s => $"{s.PlanCode}:{s.FeatureKey}")));
+            context.PlanFeatures.RemoveRange(staleGlobal);
+            logger.LogInformation("Removed {Count} globally-deprecated PlanFeature rows: {Keys}",
+                staleGlobal.Count, string.Join(", ", staleGlobal.Select(s => $"{s.PlanCode}:{s.FeatureKey}")));
+        }
+
+        // Sweep #2: per-plan obsolete grants (feature is alive, just no longer plan-included).
+        foreach (var (planCode, featureKey) in PlanGrantsToRemove)
+        {
+            var rows = await context.PlanFeatures
+                .Where(f => f.PlanCode == planCode && f.FeatureKey == featureKey)
+                .ToListAsync(ct);
+            if (rows.Count > 0)
+            {
+                context.PlanFeatures.RemoveRange(rows);
+                logger.LogInformation("Removed obsolete grant {Plan}:{Feature} (moved to add-on)",
+                    planCode, featureKey);
+            }
         }
 
         foreach (var def in PlanCatalog)
