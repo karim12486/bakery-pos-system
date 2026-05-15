@@ -21,7 +21,8 @@ namespace Nizam.Api.Core.Entities;
 ///   <item><c>reservations</c> — table reservations (Phase B / Pro)</item>
 ///   <item><c>api_access</c> — public REST API + webhooks (Pro)</item>
 ///   <item><c>inventory_ops</c> — purchase orders, recipes, COGS, transfers (Pro)</item>
-///   <item><c>whatsapp_notifications</c> — per-tenant WhatsApp (Pro / Growth add-on)</item>
+///   <item><c>messaging_notifications</c> — per-tenant messaging via Telegram or WhatsApp
+///         (Pro includes WhatsApp; Growth and Starter pick via add-on)</item>
 ///   <item><c>qr_table_menu</c> — public QR-code customer menu</item>
 ///   <item><c>ai_insights</c> — NIZAM Insights add-on (RAG chatbot)</item>
 /// </list>

@@ -31,13 +31,17 @@ public static class PlanCatalogSeeder
             MonthlyPriceEgp: 999m,
             AnnualPriceEgp: 9_990m,
             SortOrder: 10,
+            // Starter ships no premium features in the base price, but loyalty +
+            // messaging_notifications are purchasable as per-tenant add-ons
+            // (granted via TenantFeatureOverride in a future branch). Audit retention
+            // bumped to 30d so kiosks have a reasonable trail for variance disputes.
             Features: Array.Empty<string>(),
             Limits: new (string, int)[]
             {
                 ("max_branches", 1),
                 ("max_users", 3),
                 ("max_products", 50),
-                ("audit_log_retention_days", 7),
+                ("audit_log_retention_days", 30),
             }
         ),
         new(
@@ -56,6 +60,7 @@ public static class PlanCatalogSeeder
                 "loyalty",
                 "scheduled_reports",
                 "custom_receipt_branding",
+                "messaging_notifications", // Telegram free, WhatsApp via add-on at tenant's choice
             },
             Limits: new (string, int)[]
             {
@@ -89,7 +94,7 @@ public static class PlanCatalogSeeder
                 "qr_table_menu",
                 "api_access",
                 "inventory_ops",
-                "whatsapp_notifications",
+                "messaging_notifications",
             },
             Limits: new (string, int)[]
             {
@@ -101,9 +106,32 @@ public static class PlanCatalogSeeder
         ),
     };
 
+    /// <summary>
+    /// Deprecated feature keys — removed on every startup if found. This is the ONE place
+    /// where the seeder will actively remove a feature grant, used for rename-in-place
+    /// (e.g. <c>whatsapp_notifications</c> → <c>messaging_notifications</c>).
+    /// Do NOT use this to revoke entitlements — that's a customer-facing change requiring
+    /// real comms. Use it only for internal renames where the replacement is already granted.
+    /// </summary>
+    private static readonly string[] DeprecatedFeatureKeys =
+    {
+        "whatsapp_notifications", // renamed → messaging_notifications (2026-05-15)
+    };
+
     public static async Task SeedAsync(AppDbContext context, ILogger logger, CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;
+
+        // Sweep deprecated feature keys before adding the canonical replacements.
+        var stale = await context.PlanFeatures
+            .Where(f => DeprecatedFeatureKeys.Contains(f.FeatureKey))
+            .ToListAsync(ct);
+        if (stale.Count > 0)
+        {
+            context.PlanFeatures.RemoveRange(stale);
+            logger.LogInformation("Removed {Count} deprecated PlanFeature rows: {Keys}",
+                stale.Count, string.Join(", ", stale.Select(s => $"{s.PlanCode}:{s.FeatureKey}")));
+        }
 
         foreach (var def in PlanCatalog)
         {
