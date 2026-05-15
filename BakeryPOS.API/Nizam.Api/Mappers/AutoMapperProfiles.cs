@@ -70,6 +70,17 @@ namespace Nizam.Api.Mappers
                 .ForMember(dest => dest.RecordedByUserName, opt => opt.MapFrom(src => src.User != null ? src.User.FullName : "Unknown"));
 
             CreateMap<ExpenseForCreateDto, Expense>();
+
+            // --- Modifier Group Mappings ---
+            CreateMap<ModifierGroup, ModifierGroupDto>()
+                .ForMember(dest => dest.Modifiers,
+                    opt => opt.MapFrom(src => src.Modifiers.OrderBy(m => m.SortOrder).ThenBy(m => m.Id)));
+            CreateMap<Modifier, ModifierDto>();
+            CreateMap<ModifierGroupForCreateDto, ModifierGroup>()
+                .ForMember(dest => dest.Modifiers, opt => opt.MapFrom(src => src.Modifiers));
+            CreateMap<ModifierGroupForUpdateDto, ModifierGroup>();
+            CreateMap<ModifierForCreateDto, Modifier>();
+            CreateMap<ModifierForUpdateDto, Modifier>();
         }
     }
 }

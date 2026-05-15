@@ -43,6 +43,7 @@ public static class ApplicationServicesExtensions
         services.AddScoped<ISettingsService, SettingsService>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IIdempotencyService, IdempotencyService>();
+        services.AddScoped<IModifierGroupService, ModifierGroupService>();
 
         // Subscription plan service — caches the current tenant's plan/features/limits
         // for the request scope and shares a process-wide IMemoryCache across requests

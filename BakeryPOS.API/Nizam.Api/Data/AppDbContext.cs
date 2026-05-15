@@ -43,6 +43,11 @@ namespace Nizam.Api.Data
         public DbSet<Setting> Settings { get; set; }
         public DbSet<AuditLog> AuditLogs { get; set; }
 
+        // Phase B: modifier groups (controllers gated by [RequiresFeature("modifiers")]).
+        public DbSet<ModifierGroup> ModifierGroups { get; set; }
+        public DbSet<Modifier> Modifiers { get; set; }
+        public DbSet<ProductModifierGroup> ProductModifierGroups { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -202,6 +207,32 @@ namespace Nizam.Api.Data
                 e.HasIndex(x => new { x.TenantId, x.Endpoint, x.Key }).IsUnique();
             });
 
+            // ---- Modifier groups (Phase B) ----
+            modelBuilder.Entity<ModifierGroup>(e =>
+            {
+                e.Property(x => x.Name).HasMaxLength(120).IsRequired();
+                e.Property(x => x.Description).HasMaxLength(300);
+                e.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+                e.HasIndex(x => new { x.TenantId, x.SortOrder });
+            });
+            modelBuilder.Entity<Modifier>(e =>
+            {
+                e.Property(x => x.Name).HasMaxLength(120).IsRequired();
+                e.Property(x => x.PriceDelta).HasColumnType("decimal(18,2)");
+                e.HasOne(x => x.Group).WithMany(g => g.Modifiers).HasForeignKey(x => x.ModifierGroupId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasIndex(x => new { x.TenantId, x.ModifierGroupId, x.SortOrder });
+            });
+            modelBuilder.Entity<ProductModifierGroup>(e =>
+            {
+                e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasOne(x => x.ModifierGroup).WithMany(g => g.ProductLinks).HasForeignKey(x => x.ModifierGroupId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasIndex(x => new { x.TenantId, x.ProductId, x.ModifierGroupId }).IsUnique();
+                e.HasIndex(x => new { x.TenantId, x.ProductId, x.SortOrder });
+            });
+
             // ---- Global query filters: every query is automatically scoped by TenantId. ----
             // CLOSED filter: when _currentTenant.TenantId is null, the predicate `x.TenantId == null`
             // is never true (TenantId is non-nullable int), so the query returns ZERO rows.
@@ -231,8 +262,11 @@ namespace Nizam.Api.Data
             modelBuilder.Entity<UserBranchRole>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<Setting>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<AuditLog>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
-            // Tenants table itself is NOT filtered — it's the source of truth for tenant lookup
-            // (login flow, admin operations).
+            modelBuilder.Entity<ModifierGroup>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<Modifier>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<ProductModifierGroup>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            // Tenants + Plans + PlanFeatures + PlanLimits are NOT filtered — they're tenant-agnostic
+            // master data (login flow, plan lookup, admin operations).
         }
 
         /// <summary>
