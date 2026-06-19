@@ -56,6 +56,10 @@ namespace Nizam.Api.Data
         public DbSet<Area> Areas { get; set; }
         public DbSet<Table> Tables { get; set; }
 
+        /// <summary>Per-occupancy records — open session = table occupied. Source of truth
+        /// for <see cref="Table.Status"/>.</summary>
+        public DbSet<TableSession> TableSessions { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -274,6 +278,20 @@ namespace Nizam.Api.Data
                 e.HasIndex(x => new { x.TenantId, x.BranchId, x.Name }).IsUnique();
                 e.HasIndex(x => new { x.TenantId, x.BranchId, x.AreaId });
             });
+            modelBuilder.Entity<TableSession>(e =>
+            {
+                e.Property(x => x.Notes).HasMaxLength(300);
+                e.Property(x => x.RowVersion).IsRowVersion();
+                e.HasOne(x => x.Table).WithMany().HasForeignKey(x => x.TableId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                e.HasOne(x => x.ServerUser).WithMany().HasForeignKey(x => x.ServerUserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                e.HasOne(x => x.Order).WithMany().HasForeignKey(x => x.OrderId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                // Fast lookup of the open session for a table (filtered by ClosedAt in queries).
+                e.HasIndex(x => new { x.TenantId, x.TableId, x.ClosedAt });
+                e.HasIndex(x => new { x.TenantId, x.BranchId, x.ClosedAt });
+            });
 
             // ---- Global query filters: every query is automatically scoped by TenantId. ----
             // CLOSED filter: when _currentTenant.TenantId is null, the predicate `x.TenantId == null`
@@ -310,6 +328,7 @@ namespace Nizam.Api.Data
             modelBuilder.Entity<OrderItemModifier>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<Area>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<Table>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<TableSession>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             // Tenants + Plans + PlanFeatures + PlanLimits are NOT filtered — they're tenant-agnostic
             // master data (login flow, plan lookup, admin operations).
         }

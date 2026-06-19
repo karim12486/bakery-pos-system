@@ -1,0 +1,273 @@
+using AutoMapper;
+using Nizam.Api.Common.Errors;
+using Nizam.Api.Core.Entities;
+using Nizam.Api.Core.Enums;
+using Nizam.Api.Data;
+using Nizam.Api.DTOs;
+using Nizam.Api.Mappers;
+using Nizam.Api.Services;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Nizam.Api.Tests.Services;
+
+/// <summary>
+/// Unit tests for <see cref="DineInService"/> — seat / list / transfer / close / clear.
+/// Verifies table-status transitions, order envelope creation, occupancy guards, and the
+/// session lifecycle.
+/// </summary>
+public class DineInServiceTests
+{
+    private const string ActingUser = "server1";
+
+    private static IMapper BuildMapper()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddAutoMapper(cfg => cfg.AddMaps(typeof(AutoMapperProfiles).Assembly));
+        return services.BuildServiceProvider().GetRequiredService<IMapper>();
+    }
+
+    private static DineInService Build(AppDbContext ctx) => new(ctx, BuildMapper());
+
+    /// <summary>Seeds a branch + area + N tables + the acting user. Returns the context and ids.</summary>
+    private static async Task<Seed> SeedAsync(int tableCount = 2)
+    {
+        var ctx = TestContextFactory.Create();
+
+        var user = new User
+        {
+            Username = ActingUser, PasswordHash = "n/a", FullName = "Server One",
+            IsActive = true, Permissions = UserPermissions.ProcessSales,
+        };
+        ctx.Users.Add(user);
+
+        var branch = new Branch { Name = "Main", Timezone = "Africa/Cairo", IsActive = true };
+        ctx.Branches.Add(branch);
+        await ctx.SaveChangesAsync();
+
+        var area = new Area
+        {
+            BranchId = branch.Id, Name = "Indoor", IsActive = true,
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+        };
+        ctx.Areas.Add(area);
+        await ctx.SaveChangesAsync();
+
+        var tableIds = new List<int>();
+        for (var i = 1; i <= tableCount; i++)
+        {
+            var t = new Table
+            {
+                BranchId = branch.Id, AreaId = area.Id, Name = $"T-{i}", Capacity = 4,
+                Status = TableStatus.Free, IsActive = true,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            };
+            ctx.Tables.Add(t);
+            await ctx.SaveChangesAsync();
+            tableIds.Add(t.Id);
+        }
+
+        return new Seed(ctx, branch.Id, area.Id, tableIds, user.Id);
+    }
+
+    private sealed record Seed(AppDbContext Ctx, int BranchId, int AreaId, List<int> TableIds, int UserId);
+
+    // ----- Seat ---------------------------------------------------------------------
+
+    [Fact]
+    public async Task Seat_FreeTable_OpensSessionAndDineInOrder_TableOccupied()
+    {
+        var s = await SeedAsync();
+        var svc = Build(s.Ctx);
+        var t1 = s.TableIds[0];
+
+        var session = await svc.SeatAsync(
+            new SeatGuestsDto { TableId = t1, GuestCount = 3 }, ActingUser, CancellationToken.None);
+
+        Assert.Equal(t1, session.TableId);
+        Assert.Equal(3, session.GuestCount);
+        Assert.NotNull(session.OrderId);
+        Assert.Null(session.ClosedAt);
+        Assert.Equal(s.UserId, session.ServerUserId); // defaulted to acting user
+
+        // Table flipped to Occupied.
+        var table = await s.Ctx.Tables.FindAsync(t1);
+        Assert.Equal(TableStatus.Occupied, table!.Status);
+
+        // Order created as Open dine-in with the table stamped.
+        var order = await s.Ctx.Orders.FirstAsync(o => o.Id == session.OrderId!.Value);
+        Assert.Equal(OrderStatus.Open, order.Status);
+        Assert.Equal(OrderChannel.DineIn, order.Channel);
+        Assert.Equal(t1, order.TableId);
+    }
+
+    [Fact]
+    public async Task Seat_OccupiedTable_Throws()
+    {
+        var s = await SeedAsync();
+        var svc = Build(s.Ctx);
+        var t1 = s.TableIds[0];
+
+        await svc.SeatAsync(new SeatGuestsDto { TableId = t1, GuestCount = 2 }, ActingUser, CancellationToken.None);
+
+        var ex = await Assert.ThrowsAsync<DomainConflictException>(
+            () => svc.SeatAsync(new SeatGuestsDto { TableId = t1, GuestCount = 2 }, ActingUser, CancellationToken.None));
+        Assert.Equal("ERR_TABLE_OCCUPIED", ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Seat_NonexistentTable_Throws()
+    {
+        var s = await SeedAsync();
+        var svc = Build(s.Ctx);
+
+        await Assert.ThrowsAsync<DomainNotFoundException>(
+            () => svc.SeatAsync(new SeatGuestsDto { TableId = 9999, GuestCount = 2 }, ActingUser, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Seat_ExplicitServer_NotFound_Throws()
+    {
+        var s = await SeedAsync();
+        var svc = Build(s.Ctx);
+
+        var ex = await Assert.ThrowsAsync<DomainNotFoundException>(
+            () => svc.SeatAsync(
+                new SeatGuestsDto { TableId = s.TableIds[0], GuestCount = 2, ServerUserId = 9999 },
+                ActingUser, CancellationToken.None));
+        Assert.Equal("ERR_SERVER_NOT_FOUND", ex.ErrorCode);
+    }
+
+    // ----- List / Get ---------------------------------------------------------------
+
+    [Fact]
+    public async Task ListOpen_ReturnsOnlyOpenSessionsForBranch()
+    {
+        var s = await SeedAsync(tableCount: 3);
+        var svc = Build(s.Ctx);
+
+        await svc.SeatAsync(new SeatGuestsDto { TableId = s.TableIds[0], GuestCount = 2 }, ActingUser, CancellationToken.None);
+        var second = await svc.SeatAsync(new SeatGuestsDto { TableId = s.TableIds[1], GuestCount = 4 }, ActingUser, CancellationToken.None);
+        await svc.CloseAsync(second.Id, CancellationToken.None); // closed → excluded
+
+        var open = await svc.ListOpenForBranchAsync(s.BranchId, CancellationToken.None);
+        Assert.Single(open);
+        Assert.Equal(s.TableIds[0], open[0].TableId);
+    }
+
+    [Fact]
+    public async Task GetOpenForTable_FreeTable_ReturnsNull()
+    {
+        var s = await SeedAsync();
+        var svc = Build(s.Ctx);
+
+        Assert.Null(await svc.GetOpenForTableAsync(s.TableIds[0], CancellationToken.None));
+    }
+
+    // ----- Transfer -----------------------------------------------------------------
+
+    [Fact]
+    public async Task Transfer_MovesSessionAndOrder_SwapsTableStatuses()
+    {
+        var s = await SeedAsync();
+        var svc = Build(s.Ctx);
+        var from = s.TableIds[0];
+        var to = s.TableIds[1];
+
+        var session = await svc.SeatAsync(new SeatGuestsDto { TableId = from, GuestCount = 2 }, ActingUser, CancellationToken.None);
+        var orderId = session.OrderId!.Value;
+
+        var moved = await svc.TransferAsync(session.Id, new TransferTableDto { ToTableId = to }, CancellationToken.None);
+
+        Assert.Equal(to, moved.TableId);
+
+        var fromTable = await s.Ctx.Tables.FindAsync(from);
+        var toTable = await s.Ctx.Tables.FindAsync(to);
+        Assert.Equal(TableStatus.Dirty, fromTable!.Status);   // vacated
+        Assert.Equal(TableStatus.Occupied, toTable!.Status);  // new home
+
+        // Order's TableId follows the session.
+        var order = await s.Ctx.Orders.FindAsync(orderId);
+        Assert.Equal(to, order!.TableId);
+    }
+
+    [Fact]
+    public async Task Transfer_ToOccupiedTable_Throws()
+    {
+        var s = await SeedAsync();
+        var svc = Build(s.Ctx);
+
+        var first = await svc.SeatAsync(new SeatGuestsDto { TableId = s.TableIds[0], GuestCount = 2 }, ActingUser, CancellationToken.None);
+        await svc.SeatAsync(new SeatGuestsDto { TableId = s.TableIds[1], GuestCount = 2 }, ActingUser, CancellationToken.None);
+
+        var ex = await Assert.ThrowsAsync<DomainConflictException>(
+            () => svc.TransferAsync(first.Id, new TransferTableDto { ToTableId = s.TableIds[1] }, CancellationToken.None));
+        Assert.Equal("ERR_TABLE_OCCUPIED", ex.ErrorCode);
+    }
+
+    // ----- Close / Clear ------------------------------------------------------------
+
+    [Fact]
+    public async Task Close_ClosesSession_TableGoesDirty()
+    {
+        var s = await SeedAsync();
+        var svc = Build(s.Ctx);
+        var t1 = s.TableIds[0];
+
+        var session = await svc.SeatAsync(new SeatGuestsDto { TableId = t1, GuestCount = 2 }, ActingUser, CancellationToken.None);
+        await svc.CloseAsync(session.Id, CancellationToken.None);
+
+        var refreshed = await s.Ctx.TableSessions.FindAsync(session.Id);
+        Assert.NotNull(refreshed!.ClosedAt);
+
+        var table = await s.Ctx.Tables.FindAsync(t1);
+        Assert.Equal(TableStatus.Dirty, table!.Status);
+    }
+
+    [Fact]
+    public async Task Clear_DirtyTable_GoesFree()
+    {
+        var s = await SeedAsync();
+        var svc = Build(s.Ctx);
+        var t1 = s.TableIds[0];
+
+        var session = await svc.SeatAsync(new SeatGuestsDto { TableId = t1, GuestCount = 2 }, ActingUser, CancellationToken.None);
+        await svc.CloseAsync(session.Id, CancellationToken.None);
+        await svc.ClearTableAsync(t1, CancellationToken.None);
+
+        var table = await s.Ctx.Tables.FindAsync(t1);
+        Assert.Equal(TableStatus.Free, table!.Status);
+    }
+
+    [Fact]
+    public async Task Clear_OccupiedTable_Throws()
+    {
+        var s = await SeedAsync();
+        var svc = Build(s.Ctx);
+        var t1 = s.TableIds[0];
+
+        await svc.SeatAsync(new SeatGuestsDto { TableId = t1, GuestCount = 2 }, ActingUser, CancellationToken.None);
+
+        var ex = await Assert.ThrowsAsync<DomainConflictException>(
+            () => svc.ClearTableAsync(t1, CancellationToken.None));
+        Assert.Equal("ERR_TABLE_OCCUPIED", ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task SeatAfterCloseAndClear_Succeeds()
+    {
+        // Full cycle: seat → close → clear → seat again on the same table.
+        var s = await SeedAsync();
+        var svc = Build(s.Ctx);
+        var t1 = s.TableIds[0];
+
+        var first = await svc.SeatAsync(new SeatGuestsDto { TableId = t1, GuestCount = 2 }, ActingUser, CancellationToken.None);
+        await svc.CloseAsync(first.Id, CancellationToken.None);
+        await svc.ClearTableAsync(t1, CancellationToken.None);
+
+        var second = await svc.SeatAsync(new SeatGuestsDto { TableId = t1, GuestCount = 5 }, ActingUser, CancellationToken.None);
+        Assert.Equal(5, second.GuestCount);
+        Assert.NotEqual(first.Id, second.Id);
+    }
+}

@@ -80,6 +80,10 @@ namespace Nizam.Api.Mappers
             CreateMap<TableForCreateDto, Table>();
             CreateMap<TableForUpdateDto, Table>();
 
+            CreateMap<TableSession, TableSessionDto>()
+                .ForMember(dest => dest.TableName, opt => opt.MapFrom(src => src.Table != null ? src.Table.Name : "Unknown"))
+                .ForMember(dest => dest.ServerName, opt => opt.MapFrom(src => src.ServerUser != null ? src.ServerUser.FullName : null));
+
             // --- Modifier Group Mappings ---
             CreateMap<ModifierGroup, ModifierGroupDto>()
                 .ForMember(dest => dest.Modifiers,
