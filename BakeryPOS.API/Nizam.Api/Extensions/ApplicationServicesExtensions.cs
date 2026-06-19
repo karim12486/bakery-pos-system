@@ -2,6 +2,7 @@ using Nizam.Api.Common.Idempotency;
 using Nizam.Api.Core.Interfaces;
 using Nizam.Api.Services;
 using Nizam.Api.Services.Jobs;
+using Nizam.Api.Services.Kds;
 using Nizam.Api.Services.Orders;
 using Nizam.Api.Services.Plans;
 
@@ -50,6 +51,7 @@ public static class ApplicationServicesExtensions
         services.AddScoped<ITableService, TableService>();
         services.AddScoped<IDineInService, DineInService>();
         services.AddScoped<IKitchenStationService, KitchenStationService>();
+        services.AddScoped<IKdsService, KdsService>();
         // Order state machine is pure logic; safe as singleton.
         services.AddSingleton<IOrderStateMachine, OrderStateMachine>();
 

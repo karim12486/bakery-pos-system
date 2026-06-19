@@ -64,15 +64,27 @@ public class OrderItem
 
 public enum OrderItemStatus
 {
-    /// <summary>Just added to the order. Phase B.</summary>
+    // NOTE: values are appended (not reordered) to keep int storage stable for existing rows.
+
+    /// <summary>Just added to the order, not yet sent to the kitchen. Phase B.</summary>
     Pending,
 
-    /// <summary>Sent to kitchen. Phase B.</summary>
+    /// <summary>Sent to kitchen — appears on the KDS. Phase B.</summary>
     Fired,
 
-    /// <summary>Prepared and handed to customer. Phase B.</summary>
+    /// <summary>Prepared and handed to customer / served. Phase B.</summary>
     Served,
 
-    /// <summary>Closed (Phase A: immediate). Voided lines also end here.</summary>
-    Closed
+    /// <summary>Closed (Phase A: immediate on sale).</summary>
+    Closed,
+
+    /// <summary>Kitchen has started preparing (optional intermediate; some configs skip
+    /// straight from Fired to Ready). Phase B / KDS.</summary>
+    Cooking,
+
+    /// <summary>Prepared and waiting to be picked up / run to the table. Phase B / KDS.</summary>
+    Ready,
+
+    /// <summary>Cancelled before completion (with reason + audit). Phase B / KDS.</summary>
+    Voided
 }

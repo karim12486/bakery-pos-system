@@ -34,6 +34,7 @@ public static class AuditActions
     public const string RemovalRejected = "removal.reject";
     public const string LoginFailed = "login.failed";
     public const string SettingsChanged = "settings.changed";
+    public const string OrderItemVoided = "order_item.void";
 }
 
 public sealed class AuditService : IAuditService

@@ -15,6 +15,7 @@ public static class RealtimeExtensions
     public static WebApplication MapNizamHubs(this WebApplication app)
     {
         app.MapHub<RemovalHub>("/hubs/removal");
+        app.MapHub<KdsHub>("/hubs/kds");
         return app;
     }
 }
