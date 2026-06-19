@@ -110,6 +110,13 @@ public sealed class SalesService : ISalesService
             .Where(p => productIds.Contains(p.Id))
             .ToDictionaryAsync(p => p.Id, ct);
 
+        // Category → kitchen-station routing, so each OrderItem can be stamped with the station
+        // it should appear on (KDS). Loaded once; null for unrouted categories (counter/retail).
+        var categoryIds = products.Values.Select(p => p.CategoryId).Distinct().ToList();
+        var stationByCategory = await _context.Categories
+            .Where(c => categoryIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c.KitchenStationId, ct);
+
         // Per-line preparation: validate modifier selections + compute price-per-unit including
         // modifier deltas + materialise snapshot rows. Done once, indexed by line position so the
         // create loop below stays a single pass over dto.SaleDetails.
@@ -128,7 +135,11 @@ public sealed class SalesService : ISalesService
             var unitPrice = product.Price + modifierResult.TotalPriceDelta;
             var lineTotal = unitPrice * item.Quantity;
 
-            linePrep.Add(new LinePreparation(item, product, unitPrice, lineTotal, modifierResult.Snapshots));
+            // Route to a kitchen station via the product's category (null = unrouted).
+            stationByCategory.TryGetValue(product.CategoryId, out var kitchenStationId);
+
+            linePrep.Add(new LinePreparation(
+                item, product, unitPrice, lineTotal, modifierResult.Snapshots, kitchenStationId));
             totalAmount += lineTotal;
         }
 
@@ -237,6 +248,7 @@ public sealed class SalesService : ISalesService
                 LineTotal = prep.LineTotal,
                 TaxAmount = 0,
                 Modifiers = "[]", // legacy column stays empty — snapshots live in AppliedModifiers
+                KitchenStationId = prep.KitchenStationId, // KDS routing snapshot
                 Status = OrderItemStatus.Closed
             };
             foreach (var snap in prep.ModifierSnapshots) orderItem.AppliedModifiers.Add(snap);
@@ -269,7 +281,8 @@ public sealed class SalesService : ISalesService
         Product Product,
         decimal UnitPrice,
         decimal LineTotal,
-        IReadOnlyList<OrderItemModifier> ModifierSnapshots);
+        IReadOnlyList<OrderItemModifier> ModifierSnapshots,
+        int? KitchenStationId);
 
     private static (decimal cashPaid, decimal cardPaid, decimal totalPaidNow, decimal changeGiven)
         SplitPayment(SaleForCreateDto dto, decimal finalAmount)

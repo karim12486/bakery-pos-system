@@ -345,4 +345,54 @@ public class SalesServiceTests
         Assert.Equal(0, await ctx.Sales.CountAsync());
         Assert.Equal(0, await ctx.OrderItems.CountAsync());
     }
+
+    [Fact]
+    public async Task CreateAsync_StampsKitchenStation_FromProductCategory()
+    {
+        var (ctx, cashier, product) = await SeedAsync();
+
+        // Route the product's category to a kitchen station.
+        var station = new KitchenStation
+        {
+            Name = "Hot Kitchen", IsActive = true,
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+        };
+        ctx.KitchenStations.Add(station);
+        await ctx.SaveChangesAsync();
+        var category = await ctx.Categories.FindAsync(product.CategoryId);
+        category!.KitchenStationId = station.Id;
+        await ctx.SaveChangesAsync();
+
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(),
+            new NoOpAuditService(), new ModifierApplicationService(ctx), new OrderStateMachine());
+
+        await svc.CreateAsync(new SaleForCreateDto
+        {
+            PaymentMethod = PaymentType.Cash,
+            AmountPaid = 10m,
+            SaleDetails = new List<SaleDetailForCreateDto> { new() { ProductId = product.Id, Quantity = 1 } }
+        }, cashier.Username, CancellationToken.None);
+
+        var orderItem = await ctx.OrderItems.SingleAsync();
+        Assert.Equal(station.Id, orderItem.KitchenStationId);
+    }
+
+    [Fact]
+    public async Task CreateAsync_UnroutedCategory_LeavesStationNull()
+    {
+        var (ctx, cashier, product) = await SeedAsync(); // category has no station route
+
+        var svc = new SalesService(ctx, BuildMapper(), BuildValidator(),
+            new NoOpAuditService(), new ModifierApplicationService(ctx), new OrderStateMachine());
+
+        await svc.CreateAsync(new SaleForCreateDto
+        {
+            PaymentMethod = PaymentType.Cash,
+            AmountPaid = 10m,
+            SaleDetails = new List<SaleDetailForCreateDto> { new() { ProductId = product.Id, Quantity = 1 } }
+        }, cashier.Username, CancellationToken.None);
+
+        var orderItem = await ctx.OrderItems.SingleAsync();
+        Assert.Null(orderItem.KitchenStationId);
+    }
 }

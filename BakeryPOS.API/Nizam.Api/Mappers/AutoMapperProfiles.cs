@@ -84,6 +84,10 @@ namespace Nizam.Api.Mappers
                 .ForMember(dest => dest.TableName, opt => opt.MapFrom(src => src.Table != null ? src.Table.Name : "Unknown"))
                 .ForMember(dest => dest.ServerName, opt => opt.MapFrom(src => src.ServerUser != null ? src.ServerUser.FullName : null));
 
+            CreateMap<KitchenStation, KitchenStationDto>();
+            CreateMap<KitchenStationForCreateDto, KitchenStation>();
+            CreateMap<KitchenStationForUpdateDto, KitchenStation>();
+
             // --- Modifier Group Mappings ---
             CreateMap<ModifierGroup, ModifierGroupDto>()
                 .ForMember(dest => dest.Modifiers,

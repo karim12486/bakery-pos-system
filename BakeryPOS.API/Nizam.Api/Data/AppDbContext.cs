@@ -60,6 +60,10 @@ namespace Nizam.Api.Data
         /// for <see cref="Table.Status"/>.</summary>
         public DbSet<TableSession> TableSessions { get; set; }
 
+        /// <summary>Kitchen station types (Hot Kitchen, Bar, ...). Categories route to them;
+        /// KDS screens display per (branch, station).</summary>
+        public DbSet<KitchenStation> KitchenStations { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -292,6 +296,19 @@ namespace Nizam.Api.Data
                 e.HasIndex(x => new { x.TenantId, x.TableId, x.ClosedAt });
                 e.HasIndex(x => new { x.TenantId, x.BranchId, x.ClosedAt });
             });
+            modelBuilder.Entity<KitchenStation>(e =>
+            {
+                e.Property(x => x.Name).HasMaxLength(120).IsRequired();
+                e.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+                e.HasIndex(x => new { x.TenantId, x.SortOrder });
+            });
+            // Category → KitchenStation routing (nullable; SetNull so deleting a station
+            // un-routes its categories rather than cascading them away).
+            modelBuilder.Entity<Category>(e =>
+            {
+                e.HasOne(x => x.KitchenStation).WithMany().HasForeignKey(x => x.KitchenStationId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
 
             // ---- Global query filters: every query is automatically scoped by TenantId. ----
             // CLOSED filter: when _currentTenant.TenantId is null, the predicate `x.TenantId == null`
@@ -329,6 +346,7 @@ namespace Nizam.Api.Data
             modelBuilder.Entity<Area>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<Table>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<TableSession>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<KitchenStation>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             // Tenants + Plans + PlanFeatures + PlanLimits are NOT filtered — they're tenant-agnostic
             // master data (login flow, plan lookup, admin operations).
         }

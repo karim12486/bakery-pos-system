@@ -47,6 +47,11 @@ public class OrderItem
     /// and reporting. See <see cref="OrderItemModifier"/> for the snapshot contract.</summary>
     public ICollection<OrderItemModifier> AppliedModifiers { get; set; } = new List<OrderItemModifier>();
 
+    /// <summary>Kitchen station this item is routed to, snapshotted at order time from the
+    /// product's category. Null = unrouted (counter/retail) — won't surface on any KDS screen.
+    /// Denormalised so changing a category's station later doesn't re-route historical items.</summary>
+    public int? KitchenStationId { get; set; }
+
     /// <summary>Kitchen-side state. Phase A items go straight to <c>Closed</c>.</summary>
     public OrderItemStatus Status { get; set; } = OrderItemStatus.Closed;
 
