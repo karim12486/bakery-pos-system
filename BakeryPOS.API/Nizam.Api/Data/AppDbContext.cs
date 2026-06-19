@@ -52,6 +52,10 @@ namespace Nizam.Api.Data
         /// <c>OrderItem.Modifiers</c> JSON column as the source of truth.</summary>
         public DbSet<OrderItemModifier> OrderItemModifiers { get; set; }
 
+        // Phase B: floor plan (controllers gated by [RequiresFeature("tables")]).
+        public DbSet<Area> Areas { get; set; }
+        public DbSet<Table> Tables { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -247,6 +251,30 @@ namespace Nizam.Api.Data
                 e.HasIndex(x => new { x.TenantId, x.OrderItemId });
             });
 
+            // ---- Floor plan (Phase B) ----
+            modelBuilder.Entity<Area>(e =>
+            {
+                e.Property(x => x.Name).HasMaxLength(120).IsRequired();
+                e.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasIndex(x => new { x.TenantId, x.BranchId, x.Name }).IsUnique();
+                e.HasIndex(x => new { x.TenantId, x.BranchId, x.SortOrder });
+            });
+            modelBuilder.Entity<Table>(e =>
+            {
+                e.Property(x => x.Name).HasMaxLength(40).IsRequired();
+                e.Property(x => x.Shape).HasMaxLength(20).HasConversion<string>();
+                e.Property(x => x.Status).HasMaxLength(20).HasConversion<string>();
+                e.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasOne(x => x.Area).WithMany(a => a.Tables).HasForeignKey(x => x.AreaId)
+                    // Restrict (not cascade) so deleting an Area with active tables surfaces
+                    // a real error instead of silently disappearing seating.
+                    .OnDelete(DeleteBehavior.Restrict);
+                e.HasIndex(x => new { x.TenantId, x.BranchId, x.Name }).IsUnique();
+                e.HasIndex(x => new { x.TenantId, x.BranchId, x.AreaId });
+            });
+
             // ---- Global query filters: every query is automatically scoped by TenantId. ----
             // CLOSED filter: when _currentTenant.TenantId is null, the predicate `x.TenantId == null`
             // is never true (TenantId is non-nullable int), so the query returns ZERO rows.
@@ -280,6 +308,8 @@ namespace Nizam.Api.Data
             modelBuilder.Entity<Modifier>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<ProductModifierGroup>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<OrderItemModifier>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<Area>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<Table>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             // Tenants + Plans + PlanFeatures + PlanLimits are NOT filtered — they're tenant-agnostic
             // master data (login flow, plan lookup, admin operations).
         }

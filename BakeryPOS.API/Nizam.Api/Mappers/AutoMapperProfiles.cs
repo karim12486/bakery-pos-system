@@ -71,6 +71,15 @@ namespace Nizam.Api.Mappers
 
             CreateMap<ExpenseForCreateDto, Expense>();
 
+            // --- Floor plan mappings (Phase B) ---
+            CreateMap<Area, AreaDto>();
+            CreateMap<AreaForCreateDto, Area>();
+            CreateMap<AreaForUpdateDto, Area>();
+
+            CreateMap<Table, TableDto>();
+            CreateMap<TableForCreateDto, Table>();
+            CreateMap<TableForUpdateDto, Table>();
+
             // --- Modifier Group Mappings ---
             CreateMap<ModifierGroup, ModifierGroupDto>()
                 .ForMember(dest => dest.Modifiers,

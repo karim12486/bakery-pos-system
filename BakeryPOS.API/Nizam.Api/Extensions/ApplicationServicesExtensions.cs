@@ -46,6 +46,8 @@ public static class ApplicationServicesExtensions
         services.AddScoped<IIdempotencyService, IdempotencyService>();
         services.AddScoped<IModifierGroupService, ModifierGroupService>();
         services.AddScoped<IModifierApplicationService, ModifierApplicationService>();
+        services.AddScoped<IAreaService, AreaService>();
+        services.AddScoped<ITableService, TableService>();
         // Order state machine is pure logic; safe as singleton.
         services.AddSingleton<IOrderStateMachine, OrderStateMachine>();
 
