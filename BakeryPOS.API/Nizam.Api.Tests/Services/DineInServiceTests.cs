@@ -28,7 +28,12 @@ public class DineInServiceTests
         return services.BuildServiceProvider().GetRequiredService<IMapper>();
     }
 
-    private static DineInService Build(AppDbContext ctx) => new(ctx, BuildMapper());
+    private static DineInService Build(AppDbContext ctx)
+    {
+        var kds = new Nizam.Api.Services.Kds.KdsService(
+            ctx, new Nizam.Api.Common.Tenancy.AmbientTenant(1), new FakeKdsHubContext(), new NoOpAuditService());
+        return new(ctx, BuildMapper(), new ModifierApplicationService(ctx), kds);
+    }
 
     /// <summary>Seeds a branch + area + N tables + the acting user. Returns the context and ids.</summary>
     private static async Task<Seed> SeedAsync(int tableCount = 2)
@@ -269,5 +274,95 @@ public class DineInServiceTests
         var second = await svc.SeatAsync(new SeatGuestsDto { TableId = t1, GuestCount = 5 }, ActingUser, CancellationToken.None);
         Assert.Equal(5, second.GuestCount);
         Assert.NotEqual(first.Id, second.Id);
+    }
+
+    // ----- Order items (add / fire) -------------------------------------------------
+
+    /// <summary>Seats a table and seeds a routed product. Returns (orderId, productId, stationId).</summary>
+    private static async Task<(int OrderId, int ProductId, int StationId)> SeatWithProductAsync(
+        Seed s, DineInService svc)
+    {
+        var station = new KitchenStation
+        {
+            Name = "Hot Kitchen", IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+        };
+        s.Ctx.KitchenStations.Add(station);
+        await s.Ctx.SaveChangesAsync();
+
+        var cat = new Category { Name = "Food", KitchenStationId = station.Id };
+        s.Ctx.Categories.Add(cat);
+        await s.Ctx.SaveChangesAsync();
+        var product = new Product
+        {
+            Name = "Burger", Description = "", Price = 50m, CostPrice = 20m, StockQuantity = 100,
+            CategoryId = cat.Id, IsActive = true, CreatedAt = DateTime.UtcNow,
+        };
+        s.Ctx.Products.Add(product);
+        await s.Ctx.SaveChangesAsync();
+
+        var session = await svc.SeatAsync(
+            new SeatGuestsDto { TableId = s.TableIds[0], GuestCount = 2 }, ActingUser, CancellationToken.None);
+        return (session.OrderId!.Value, product.Id, station.Id);
+    }
+
+    [Fact]
+    public async Task AddItems_CreatesPendingItems_RecomputesTotal_RoutesStation()
+    {
+        var s = await SeedAsync();
+        var svc = Build(s.Ctx);
+        var (orderId, productId, stationId) = await SeatWithProductAsync(s, svc);
+
+        var dto = new AddOrderItemsDto
+        {
+            Items = new List<SaleDetailForCreateDto> { new() { ProductId = productId, Quantity = 2 } }
+        };
+        var order = await svc.AddItemsAsync(orderId, dto, CancellationToken.None);
+
+        Assert.Single(order.Items);
+        Assert.Equal("Pending", order.Items[0].Status);
+        Assert.Equal(stationId, order.Items[0].KitchenStationId);
+        Assert.Equal(100m, order.Subtotal);     // 2 × 50
+        Assert.Equal(100m, order.FinalAmount);
+    }
+
+    [Fact]
+    public async Task FireOrder_TransitionsPendingToFired_AndStampsFiredAt()
+    {
+        var s = await SeedAsync();
+        var svc = Build(s.Ctx);
+        var (orderId, productId, _) = await SeatWithProductAsync(s, svc);
+
+        await svc.AddItemsAsync(orderId,
+            new AddOrderItemsDto { Items = new() { new() { ProductId = productId, Quantity = 1 } } },
+            CancellationToken.None);
+
+        var fired = await svc.FireOrderAsync(orderId, CancellationToken.None);
+        Assert.Equal("Fired", fired.Items[0].Status);
+
+        var item = await s.Ctx.OrderItems.SingleAsync();
+        Assert.Equal(OrderItemStatus.Fired, item.Status);
+        Assert.NotNull(item.FiredAt);
+    }
+
+    [Fact]
+    public async Task AddItems_ToNonDineInOrder_Throws()
+    {
+        var s = await SeedAsync();
+        var svc = Build(s.Ctx);
+
+        // A takeaway order — not dine-in.
+        var order = new Order
+        {
+            CashierUserId = s.UserId, BranchId = s.BranchId, Status = OrderStatus.Open,
+            Channel = OrderChannel.Takeaway, OpenedAt = DateTime.UtcNow,
+        };
+        s.Ctx.Orders.Add(order);
+        await s.Ctx.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<DomainException>(
+            () => svc.AddItemsAsync(order.Id,
+                new AddOrderItemsDto { Items = new() { new() { ProductId = 1, Quantity = 1 } } },
+                CancellationToken.None));
+        Assert.Equal("ERR_NOT_DINE_IN", ex.ErrorCode);
     }
 }

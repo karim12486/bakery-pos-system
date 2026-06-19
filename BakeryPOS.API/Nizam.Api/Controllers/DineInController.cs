@@ -75,4 +75,24 @@ public class DineInController : ControllerBase
         await _dineIn.ClearTableAsync(tableId, ct);
         return NoContent();
     }
+
+    // ----- Order items ---------------------------------------------------------------
+
+    /// <summary>The dine-in order with its current items + running totals.</summary>
+    [HttpGet("orders/{orderId:int}")]
+    public async Task<ActionResult<DineInOrderDto>> GetOrder(int orderId, CancellationToken ct)
+        => Ok(await _dineIn.GetOrderAsync(orderId, ct));
+
+    /// <summary>Append items (with modifiers) to an open dine-in order — created Pending,
+    /// not yet sent to the kitchen.</summary>
+    [HttpPost("orders/{orderId:int}/items")]
+    [HasPermission(UserPermissions.ProcessSales)]
+    public async Task<ActionResult<DineInOrderDto>> AddItems(int orderId, AddOrderItemsDto dto, CancellationToken ct)
+        => Ok(await _dineIn.AddItemsAsync(orderId, dto, ct));
+
+    /// <summary>Fire all Pending items on the order to the kitchen (broadcasts to KDS).</summary>
+    [HttpPost("orders/{orderId:int}/fire")]
+    [HasPermission(UserPermissions.ProcessSales)]
+    public async Task<ActionResult<DineInOrderDto>> FireOrder(int orderId, CancellationToken ct)
+        => Ok(await _dineIn.FireOrderAsync(orderId, ct));
 }

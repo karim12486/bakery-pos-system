@@ -43,7 +43,7 @@ public class KdsServiceTests
 
     // ----- Service ------------------------------------------------------------------
 
-    private static KdsService Build(AppDbContext ctx, CapturingHubContext hub)
+    private static KdsService Build(AppDbContext ctx, FakeKdsHubContext hub)
         => new(ctx, new AmbientTenant(TenantId), hub, new NoOpAuditService());
 
     /// <summary>Seeds an order at (branch, table) and an order item at the station with the
@@ -84,7 +84,7 @@ public class KdsServiceTests
     public async Task Fire_SetsFiredAt_AndBroadcastsToStationGroup()
     {
         using var ctx = TestContextFactory.Create();
-        var hub = new CapturingHubContext();
+        var hub = new FakeKdsHubContext();
         var svc = Build(ctx, hub);
         var itemId = await SeedItemAsync(ctx, OrderItemStatus.Pending);
 
@@ -104,7 +104,7 @@ public class KdsServiceTests
     public async Task Ready_Then_Served_SetsServedAt()
     {
         using var ctx = TestContextFactory.Create();
-        var hub = new CapturingHubContext();
+        var hub = new FakeKdsHubContext();
         var svc = Build(ctx, hub);
         var itemId = await SeedItemAsync(ctx, OrderItemStatus.Fired, firedAt: DateTime.UtcNow);
 
@@ -121,7 +121,7 @@ public class KdsServiceTests
     public async Task InvalidTransition_Throws()
     {
         using var ctx = TestContextFactory.Create();
-        var svc = Build(ctx, new CapturingHubContext());
+        var svc = Build(ctx, new FakeKdsHubContext());
         var itemId = await SeedItemAsync(ctx, OrderItemStatus.Pending);
 
         // Pending → Served is not allowed (must fire first).
@@ -135,7 +135,7 @@ public class KdsServiceTests
     public async Task Void_RequiresReason_SetsVoided()
     {
         using var ctx = TestContextFactory.Create();
-        var svc = Build(ctx, new CapturingHubContext());
+        var svc = Build(ctx, new FakeKdsHubContext());
         var itemId = await SeedItemAsync(ctx, OrderItemStatus.Fired, firedAt: DateTime.UtcNow);
 
         var dto = await svc.VoidAsync(itemId, "86'd — out of buns", CancellationToken.None);
@@ -148,7 +148,7 @@ public class KdsServiceTests
     public async Task Queue_ReturnsOnlyOpenItems_ForStationAndBranch()
     {
         using var ctx = TestContextFactory.Create();
-        var svc = Build(ctx, new CapturingHubContext());
+        var svc = Build(ctx, new FakeKdsHubContext());
 
         var fired = await SeedItemAsync(ctx, OrderItemStatus.Fired, firedAt: DateTime.UtcNow);
         await SeedItemAsync(ctx, OrderItemStatus.Ready, firedAt: DateTime.UtcNow);
@@ -171,7 +171,7 @@ public class KdsServiceTests
     public async Task Queue_AgingColor(int minutesAgo, string expectedColor)
     {
         using var ctx = TestContextFactory.Create();
-        var svc = Build(ctx, new CapturingHubContext());
+        var svc = Build(ctx, new FakeKdsHubContext());
         await SeedItemAsync(ctx, OrderItemStatus.Fired, firedAt: DateTime.UtcNow.AddMinutes(-minutesAgo));
 
         var queue = await svc.GetQueueAsync(BranchId, StationId, CancellationToken.None);

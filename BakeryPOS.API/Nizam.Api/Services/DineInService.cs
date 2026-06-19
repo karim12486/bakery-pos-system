@@ -4,6 +4,7 @@ using Nizam.Api.Core.Entities;
 using Nizam.Api.Core.Enums;
 using Nizam.Api.Data;
 using Nizam.Api.DTOs;
+using Nizam.Api.Services.Kds;
 using Microsoft.EntityFrameworkCore;
 
 namespace Nizam.Api.Services;
@@ -28,17 +29,37 @@ public interface IDineInService
 
     /// <summary>Marks a Dirty table clean and Free, ready for the next guests.</summary>
     Task ClearTableAsync(int tableId, CancellationToken ct);
+
+    /// <summary>The dine-in order with its current line items + running totals.</summary>
+    Task<DineInOrderDto> GetOrderAsync(int orderId, CancellationToken ct);
+
+    /// <summary>Appends items (with modifiers) to an open dine-in order as Pending — not yet
+    /// sent to the kitchen. Recomputes the order total. Validates modifiers + routes each item
+    /// to its kitchen station.</summary>
+    Task<DineInOrderDto> AddItemsAsync(int orderId, AddOrderItemsDto dto, CancellationToken ct);
+
+    /// <summary>Fires all Pending items on the order to the kitchen (Pending → Fired), stamping
+    /// FiredAt and broadcasting each to its KDS station screen.</summary>
+    Task<DineInOrderDto> FireOrderAsync(int orderId, CancellationToken ct);
 }
 
 public sealed class DineInService : IDineInService
 {
     private readonly AppDbContext _context;
     private readonly IMapper _mapper;
+    private readonly IModifierApplicationService _modifierApp;
+    private readonly IKdsService _kds;
 
-    public DineInService(AppDbContext context, IMapper mapper)
+    public DineInService(
+        AppDbContext context,
+        IMapper mapper,
+        IModifierApplicationService modifierApp,
+        IKdsService kds)
     {
         _context = context;
         _mapper = mapper;
+        _modifierApp = modifierApp;
+        _kds = kds;
     }
 
     public async Task<TableSessionDto> SeatAsync(SeatGuestsDto dto, string actingUsername, CancellationToken ct)
@@ -213,7 +234,140 @@ public sealed class DineInService : IDineInService
         await _context.SaveChangesAsync(ct);
     }
 
+    // ----- Order items --------------------------------------------------------------
+
+    public async Task<DineInOrderDto> GetOrderAsync(int orderId, CancellationToken ct)
+    {
+        await LoadDineInOrderAsync(orderId, ct); // existence + channel guard
+        return await ProjectOrderAsync(orderId, ct);
+    }
+
+    public async Task<DineInOrderDto> AddItemsAsync(int orderId, AddOrderItemsDto dto, CancellationToken ct)
+    {
+        var order = await LoadDineInOrderAsync(orderId, ct);
+        if (order.Status != OrderStatus.Open)
+            throw new DomainConflictException("ERR_ORDER_NOT_OPEN",
+                "Items can only be added to an open order.");
+
+        var productIds = dto.Items.Select(i => i.ProductId).Distinct().ToList();
+        var products = await _context.Products
+            .Where(p => productIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, ct);
+
+        var categoryIds = products.Values.Select(p => p.CategoryId).Distinct().ToList();
+        var stationByCategory = await _context.Categories
+            .Where(c => categoryIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c.KitchenStationId, ct);
+
+        using var tx = await _context.Database.BeginTransactionAsync(ct);
+
+        foreach (var line in dto.Items)
+        {
+            if (!products.TryGetValue(line.ProductId, out var product))
+                throw new DomainException("ERR_PRODUCT_NOT_FOUND", $"Produit {line.ProductId} introuvable.");
+
+            var modifierResult = await _modifierApp.PrepareAsync(
+                line.ProductId,
+                (IReadOnlyCollection<int>?)line.ModifierIds ?? Array.Empty<int>(),
+                ct);
+
+            var unitPrice = product.Price + modifierResult.TotalPriceDelta;
+            stationByCategory.TryGetValue(product.CategoryId, out var stationId);
+
+            var orderItem = new OrderItem
+            {
+                OrderId = order.Id,
+                ProductId = product.Id,
+                Quantity = line.Quantity,
+                UnitPrice = unitPrice,
+                LineTotal = unitPrice * line.Quantity,
+                TaxAmount = 0,
+                Modifiers = "[]",
+                KitchenStationId = stationId,
+                Status = OrderItemStatus.Pending, // not fired until the server sends it
+            };
+            foreach (var snap in modifierResult.Snapshots) orderItem.AppliedModifiers.Add(snap);
+            await _context.OrderItems.AddAsync(orderItem, ct);
+        }
+
+        await _context.SaveChangesAsync(ct);
+        await RecomputeTotalsAsync(order, ct);
+        await tx.CommitAsync(ct);
+
+        return await ProjectOrderAsync(orderId, ct);
+    }
+
+    public async Task<DineInOrderDto> FireOrderAsync(int orderId, CancellationToken ct)
+    {
+        await LoadDineInOrderAsync(orderId, ct);
+
+        var pending = await _context.OrderItems
+            .Where(oi => oi.OrderId == orderId && oi.Status == OrderItemStatus.Pending)
+            .Select(oi => oi.Id)
+            .ToListAsync(ct);
+
+        // Delegate per-item to the KDS service so firing here behaves identically to firing
+        // from a KDS screen (FiredAt stamp + station broadcast), no duplicated logic.
+        foreach (var itemId in pending)
+            await _kds.FireAsync(itemId, ct);
+
+        return await ProjectOrderAsync(orderId, ct);
+    }
+
     // ----- Helpers -----------------------------------------------------------------
+
+    private async Task<Order> LoadDineInOrderAsync(int orderId, CancellationToken ct)
+    {
+        var order = await _context.Orders.FirstOrDefaultAsync(o => o.Id == orderId, ct)
+            ?? throw new DomainNotFoundException("ERR_ORDER_NOT_FOUND", $"Order {orderId} introuvable.");
+        if (order.Channel != OrderChannel.DineIn)
+            throw new DomainException("ERR_NOT_DINE_IN", "This order is not a dine-in order.");
+        return order;
+    }
+
+    private async Task RecomputeTotalsAsync(Order order, CancellationToken ct)
+    {
+        var subtotal = await _context.OrderItems
+            .Where(oi => oi.OrderId == order.Id && oi.Status != OrderItemStatus.Voided)
+            .SumAsync(oi => oi.LineTotal, ct);
+
+        order.Subtotal = subtotal;
+        order.FinalAmount = subtotal - order.DiscountAmount; // tax applied at payment (Phase B+)
+        await _context.SaveChangesAsync(ct);
+    }
+
+    private async Task<DineInOrderDto> ProjectOrderAsync(int orderId, CancellationToken ct)
+    {
+        var order = await _context.Orders.FirstAsync(o => o.Id == orderId, ct);
+        var items = await _context.OrderItems
+            .Where(oi => oi.OrderId == orderId)
+            .Include(oi => oi.Product)
+            .Include(oi => oi.AppliedModifiers)
+            .OrderBy(oi => oi.Id)
+            .ToListAsync(ct);
+
+        return new DineInOrderDto
+        {
+            OrderId = order.Id,
+            TableId = order.TableId,
+            Status = order.Status.ToString(),
+            Subtotal = order.Subtotal,
+            DiscountAmount = order.DiscountAmount,
+            FinalAmount = order.FinalAmount,
+            Items = items.Select(oi => new DineInOrderItemDto
+            {
+                OrderItemId = oi.Id,
+                ProductId = oi.ProductId,
+                ProductName = oi.Product?.Name ?? "Unknown",
+                Quantity = oi.Quantity,
+                UnitPrice = oi.UnitPrice,
+                LineTotal = oi.LineTotal,
+                Status = oi.Status.ToString(),
+                KitchenStationId = oi.KitchenStationId,
+                Modifiers = oi.AppliedModifiers.Select(m => m.Name).ToList(),
+            }).ToList(),
+        };
+    }
 
     private async Task<TableSessionDto> ProjectAsync(int sessionId, CancellationToken ct)
     {
