@@ -35,6 +35,7 @@ public static class AuditActions
     public const string LoginFailed = "login.failed";
     public const string SettingsChanged = "settings.changed";
     public const string OrderItemVoided = "order_item.void";
+    public const string OrderItemComped = "order_item.comp";
 }
 
 public sealed class AuditService : IAuditService

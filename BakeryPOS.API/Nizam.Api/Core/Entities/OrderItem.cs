@@ -57,6 +57,11 @@ public class OrderItem
     /// paces the meal. Phase B / dine-in.</summary>
     public int CourseNumber { get; set; } = 1;
 
+    /// <summary>Comped = the kitchen still makes it but the guest isn't charged (manager
+    /// goodwill / mistake recovery). When true the line total is zeroed; the original
+    /// <see cref="UnitPrice"/> is retained for reporting. Requires a manager override to set.</summary>
+    public bool IsComped { get; set; }
+
     /// <summary>Kitchen-side state. Phase A items go straight to <c>Closed</c>.</summary>
     public OrderItemStatus Status { get; set; } = OrderItemStatus.Closed;
 
