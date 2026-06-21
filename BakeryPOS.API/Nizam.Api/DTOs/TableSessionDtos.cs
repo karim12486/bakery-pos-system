@@ -39,3 +39,10 @@ public class TransferTableDto
     [Required, Range(1, int.MaxValue)]
     public int ToTableId { get; set; }
 }
+
+/// <summary>Payload for merging a session into another (destination keeps its session/order).</summary>
+public class MergeSessionDto
+{
+    [Required, Range(1, int.MaxValue)]
+    public int IntoSessionId { get; set; }
+}

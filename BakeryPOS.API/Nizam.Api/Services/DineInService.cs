@@ -24,6 +24,12 @@ public interface IDineInService
     /// <summary>Moves an open session (and its order) to a different free table.</summary>
     Task<TableSessionDto> TransferAsync(int sessionId, TransferTableDto dto, CancellationToken ct);
 
+    /// <summary>Merges <paramref name="sessionId"/> INTO <paramref name="intoSessionId"/>: moves
+    /// the source order's items to the destination order, sums guest counts, closes the source
+    /// session and frees its table (Dirty), cancels the now-empty source order. Both must be open,
+    /// same branch, and neither order may have checks yet.</summary>
+    Task<TableSessionDto> MergeAsync(int sessionId, int intoSessionId, CancellationToken ct);
+
     /// <summary>Closes the session (guests gone / bill settled) and flips the table to Dirty.</summary>
     Task CloseAsync(int sessionId, CancellationToken ct);
 
@@ -49,17 +55,20 @@ public sealed class DineInService : IDineInService
     private readonly IMapper _mapper;
     private readonly IModifierApplicationService _modifierApp;
     private readonly IKdsService _kds;
+    private readonly Orders.IOrderStateMachine _orderStates;
 
     public DineInService(
         AppDbContext context,
         IMapper mapper,
         IModifierApplicationService modifierApp,
-        IKdsService kds)
+        IKdsService kds,
+        Orders.IOrderStateMachine orderStates)
     {
         _context = context;
         _mapper = mapper;
         _modifierApp = modifierApp;
         _kds = kds;
+        _orderStates = orderStates;
     }
 
     public async Task<TableSessionDto> SeatAsync(SeatGuestsDto dto, string actingUsername, CancellationToken ct)
@@ -194,6 +203,57 @@ public sealed class DineInService : IDineInService
         await tx.CommitAsync(ct);
 
         return await ProjectAsync(session.Id, ct);
+    }
+
+    public async Task<TableSessionDto> MergeAsync(int sessionId, int intoSessionId, CancellationToken ct)
+    {
+        if (sessionId == intoSessionId)
+            throw new DomainException("ERR_MERGE_SAME_SESSION", "Cannot merge a session into itself.");
+
+        var source = await _context.TableSessions.FirstOrDefaultAsync(s => s.Id == sessionId && s.ClosedAt == null, ct)
+            ?? throw new DomainNotFoundException("ERR_SESSION_NOT_FOUND", $"Open session {sessionId} introuvable.");
+        var dest = await _context.TableSessions.FirstOrDefaultAsync(s => s.Id == intoSessionId && s.ClosedAt == null, ct)
+            ?? throw new DomainNotFoundException("ERR_SESSION_NOT_FOUND", $"Open session {intoSessionId} introuvable.");
+
+        if (source.BranchId != dest.BranchId)
+            throw new DomainException("ERR_MERGE_BRANCH_MISMATCH", "Cannot merge sessions across branches.");
+        if (source.OrderId is not int sourceOrderId || dest.OrderId is not int destOrderId)
+            throw new DomainConflictException("ERR_MERGE_NO_ORDER", "Both sessions must have an order to merge.");
+
+        // Merging once a bill is being settled would corrupt check math — block if either side
+        // has checks.
+        if (await _context.Checks.AnyAsync(c => c.OrderId == sourceOrderId || c.OrderId == destOrderId, ct))
+            throw new DomainConflictException("ERR_MERGE_CHECKS_EXIST",
+                "Cannot merge after a bill has been split. Re-split on the merged table instead.");
+
+        using var tx = await _context.Database.BeginTransactionAsync(ct);
+        var now = DateTime.UtcNow;
+
+        // Move the source order's items onto the destination order.
+        var movingItems = await _context.OrderItems.Where(oi => oi.OrderId == sourceOrderId).ToListAsync(ct);
+        foreach (var oi in movingItems) oi.OrderId = destOrderId;
+
+        // Sum guest counts onto the destination session.
+        dest.GuestCount += source.GuestCount;
+
+        // Cancel the now-empty source order, close the source session, free its table.
+        var sourceOrder = await _context.Orders.FirstAsync(o => o.Id == sourceOrderId, ct);
+        _orderStates.AssertTransition(sourceOrder.Status, OrderStatus.Cancelled);
+        sourceOrder.Status = OrderStatus.Cancelled;
+        sourceOrder.ClosedAt = now;
+
+        source.ClosedAt = now;
+        var sourceTable = await _context.Tables.FirstOrDefaultAsync(t => t.Id == source.TableId, ct);
+        if (sourceTable != null) { sourceTable.Status = TableStatus.Dirty; sourceTable.UpdatedAt = now; }
+
+        await _context.SaveChangesAsync(ct);
+
+        // Recompute the destination order's totals over the combined items.
+        var destOrder = await _context.Orders.FirstAsync(o => o.Id == destOrderId, ct);
+        await RecomputeTotalsAsync(destOrder, ct);
+
+        await tx.CommitAsync(ct);
+        return await ProjectAsync(dest.Id, ct);
     }
 
     public async Task CloseAsync(int sessionId, CancellationToken ct)

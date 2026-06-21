@@ -32,7 +32,8 @@ public class DineInServiceTests
     {
         var kds = new Nizam.Api.Services.Kds.KdsService(
             ctx, new Nizam.Api.Common.Tenancy.AmbientTenant(1), new FakeKdsHubContext(), new NoOpAuditService());
-        return new(ctx, BuildMapper(), new ModifierApplicationService(ctx), kds);
+        return new(ctx, BuildMapper(), new ModifierApplicationService(ctx), kds,
+            new Nizam.Api.Services.Orders.OrderStateMachine());
     }
 
     /// <summary>Seeds a branch + area + N tables + the acting user. Returns the context and ids.</summary>
@@ -364,5 +365,57 @@ public class DineInServiceTests
                 new AddOrderItemsDto { Items = new() { new() { ProductId = 1, Quantity = 1 } } },
                 CancellationToken.None));
         Assert.Equal("ERR_NOT_DINE_IN", ex.ErrorCode);
+    }
+
+    // ----- Merge --------------------------------------------------------------------
+
+    [Fact]
+    public async Task Merge_MovesItems_SumsGuests_FreesSourceTable_CancelsSourceOrder()
+    {
+        var s = await SeedAsync(tableCount: 2);
+        var svc = Build(s.Ctx);
+        var (destOrderId, productId, _) = await SeatWithProductAsync(s, svc);
+        var destSession = await svc.GetOpenForTableAsync(s.TableIds[0], CancellationToken.None);
+
+        // Source: seat table 2 (3 guests) + add an item.
+        var sourceSession = await svc.SeatAsync(
+            new SeatGuestsDto { TableId = s.TableIds[1], GuestCount = 3 }, ActingUser, CancellationToken.None);
+        await svc.AddItemsAsync(sourceSession.OrderId!.Value,
+            new AddOrderItemsDto { Items = new() { new() { ProductId = productId, Quantity = 1 } } },
+            CancellationToken.None);
+        // Dest gets an item too.
+        await svc.AddItemsAsync(destOrderId,
+            new AddOrderItemsDto { Items = new() { new() { ProductId = productId, Quantity = 1 } } },
+            CancellationToken.None);
+
+        var merged = await svc.MergeAsync(sourceSession.Id, destSession!.Id, CancellationToken.None);
+
+        // Destination session keeps going, guests summed (2 + 3 = 5).
+        Assert.Equal(destSession.Id, merged.Id);
+        Assert.Equal(5, merged.GuestCount);
+
+        // Both items now on the destination order.
+        Assert.Equal(2, await s.Ctx.OrderItems.CountAsync(oi => oi.OrderId == destOrderId));
+
+        // Source order cancelled, source session closed, source table Dirty.
+        var sourceOrder = await s.Ctx.Orders.FindAsync(sourceSession.OrderId!.Value);
+        Assert.Equal(OrderStatus.Cancelled, sourceOrder!.Status);
+        var sourceSess = await s.Ctx.TableSessions.FindAsync(sourceSession.Id);
+        Assert.NotNull(sourceSess!.ClosedAt);
+        var sourceTable = await s.Ctx.Tables.FindAsync(s.TableIds[1]);
+        Assert.Equal(TableStatus.Dirty, sourceTable!.Status);
+    }
+
+    [Fact]
+    public async Task Merge_IntoItself_Throws()
+    {
+        var s = await SeedAsync();
+        var svc = Build(s.Ctx);
+        var (_, _, _) = await SeatWithProductAsync(s, svc);
+        var session = await svc.GetOpenForTableAsync(s.TableIds[0], CancellationToken.None);
+
+        var ex = await Assert.ThrowsAsync<DomainException>(
+            () => svc.MergeAsync(session!.Id, session.Id, CancellationToken.None));
+        Assert.Equal("ERR_MERGE_SAME_SESSION", ex.ErrorCode);
     }
 }

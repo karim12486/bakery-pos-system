@@ -58,6 +58,12 @@ public class DineInController : ControllerBase
     public async Task<ActionResult<TableSessionDto>> Transfer(int sessionId, TransferTableDto dto, CancellationToken ct)
         => Ok(await _dineIn.TransferAsync(sessionId, dto, ct));
 
+    /// <summary>Merge this session into another (combines parties; source table is freed).</summary>
+    [HttpPost("sessions/{sessionId:int}/merge")]
+    [HasPermission(UserPermissions.ProcessSales)]
+    public async Task<ActionResult<TableSessionDto>> Merge(int sessionId, MergeSessionDto dto, CancellationToken ct)
+        => Ok(await _dineIn.MergeAsync(sessionId, dto.IntoSessionId, ct));
+
     /// <summary>Close a session (guests gone / bill settled). Table goes Dirty until cleared.</summary>
     [HttpPost("sessions/{sessionId:int}/close")]
     [HasPermission(UserPermissions.ProcessSales)]
