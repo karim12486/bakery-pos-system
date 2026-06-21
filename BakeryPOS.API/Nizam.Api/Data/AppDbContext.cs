@@ -26,6 +26,9 @@ namespace Nizam.Api.Data
         /// super-admin / billing paths; consumed by PlanService when building the feature set.</summary>
         public DbSet<TenantFeatureOverride> TenantFeatureOverrides { get; set; }
 
+        /// <summary>Platform operators (NIZAM team). Not tenant-scoped.</summary>
+        public DbSet<SuperAdmin> SuperAdmins { get; set; }
+
         // Existing entities (all now have TenantId; the four operational ones also have BranchId).
         public DbSet<User> Users { get; set; }
         public DbSet<Product> Products { get; set; }
@@ -338,6 +341,12 @@ namespace Nizam.Api.Data
                 e.Property(x => x.Reason).HasMaxLength(200);
                 // One override row per (tenant, feature).
                 e.HasIndex(x => new { x.TenantId, x.FeatureKey }).IsUnique();
+            });
+            modelBuilder.Entity<SuperAdmin>(e =>
+            {
+                e.Property(x => x.Username).HasMaxLength(80).IsRequired();
+                e.Property(x => x.FullName).HasMaxLength(120);
+                e.HasIndex(x => x.Username).IsUnique();
             });
             modelBuilder.Entity<Reservation>(e =>
             {

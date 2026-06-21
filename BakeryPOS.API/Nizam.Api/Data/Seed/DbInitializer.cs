@@ -41,6 +41,10 @@ namespace Nizam.Api.Data.Seed
             //    Tenants.PlanCode FK can be satisfied. Idempotent upsert.
             await PlanCatalogSeeder.SeedAsync(context, logger);
 
+            // 0b. First platform super-admin. Independent of the tenant-admin block below
+            //     (which early-returns) so it always runs. Idempotent: only when none exist.
+            await SeedSuperAdminAsync(context, passwordService, logger, contentRootPath);
+
             // 1. Default Tenant
             // IgnoreQueryFilters because the seeder runs without a tenant in scope.
             var tenant = await context.Tenants
@@ -141,6 +145,41 @@ namespace Nizam.Api.Data.Seed
             logger.LogWarning(
                 "Initial admin account seeded. Credentials written to {Path}. Change the password and delete the file.",
                 credentialsFile);
+        }
+
+        /// <summary>Seeds the first platform super-admin if none exists. Credentials written to
+        /// a file (mirrors the initial-admin pattern); rotate + delete after first login.</summary>
+        private static async Task SeedSuperAdminAsync(
+            AppDbContext context, IPasswordService passwordService, ILogger logger, string contentRootPath)
+        {
+            if (await context.SuperAdmins.AnyAsync()) return;
+
+            var password = GenerateInitialPassword();
+            context.SuperAdmins.Add(new SuperAdmin
+            {
+                Username = "superadmin",
+                PasswordHash = passwordService.HashPassword(password),
+                FullName = "NIZAM Platform Admin",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+            });
+            await context.SaveChangesAsync();
+
+            var file = Path.Combine(contentRootPath, "INITIAL_SUPERADMIN_PASSWORD.txt");
+            try
+            {
+                File.WriteAllText(file,
+                    $"Initial super-admin password: {password}{Environment.NewLine}" +
+                    $"Username: superadmin{Environment.NewLine}" +
+                    $"Generated: {DateTime.UtcNow:O}{Environment.NewLine}" +
+                    "DELETE THIS FILE AFTER FIRST LOGIN AND PASSWORD ROTATION." + Environment.NewLine);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Could not write super-admin password file at {Path}", file);
+            }
+
+            logger.LogWarning("Initial super-admin seeded. Credentials at {Path}.", file);
         }
 
         // 18 random bytes -> 24 url-safe chars. ~143 bits of entropy.

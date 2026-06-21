@@ -210,5 +210,6 @@ public class PinAuthServiceTests
     private sealed class StubTokenService : ITokenService
     {
         public string CreateToken(User user, int? branchId = null) => $"token-for-{user.Username}";
+        public string CreateSuperAdminToken(SuperAdmin admin) => $"super-{admin.Username}";
     }
 }

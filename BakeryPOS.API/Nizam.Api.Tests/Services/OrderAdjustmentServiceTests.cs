@@ -193,5 +193,6 @@ public class OrderAdjustmentServiceTests
     private sealed class StubToken : ITokenService
     {
         public string CreateToken(User user, int? branchId = null) => "t";
+        public string CreateSuperAdminToken(SuperAdmin admin) => "s";
     }
 }

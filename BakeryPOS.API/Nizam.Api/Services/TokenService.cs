@@ -67,5 +67,33 @@ namespace Nizam.Api.Services
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
         }
+
+        public string CreateSuperAdminToken(SuperAdmin admin)
+        {
+            // No tenant_id — super-admins are cross-tenant. The super_admin claim is the gate
+            // checked by [SuperAdminOnly]. Shorter-lived than tenant tokens by design.
+            var claims = new List<Claim>
+            {
+                new Claim(JwtRegisteredClaimNames.NameId, admin.Username),
+                new Claim("uid", admin.Id.ToString()),
+                new Claim(Core.Interfaces.NizamClaims.SuperAdmin, "true"),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            };
+
+            var creds = new SigningCredentials(_key, SecurityAlgorithms.HmacSha512Signature);
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(claims),
+                IssuedAt = DateTime.UtcNow,
+                NotBefore = DateTime.UtcNow,
+                Expires = DateTime.UtcNow.AddHours(Math.Min(_lifetimeHours, 4)), // cap super-admin sessions
+                SigningCredentials = creds,
+                Issuer = _issuer,
+                Audience = _audience
+            };
+
+            var handler = new JwtSecurityTokenHandler();
+            return handler.WriteToken(handler.CreateToken(tokenDescriptor));
+        }
     }
 }
