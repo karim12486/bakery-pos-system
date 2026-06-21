@@ -1,9 +1,12 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using Nizam.Api.Common.Errors;
+using Nizam.Api.Core.Attributes;
+using Nizam.Api.Core.Enums;
 using Nizam.Api.Core.Interfaces;
 using Nizam.Api.DTOs;
 using Nizam.Api.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
@@ -15,12 +18,14 @@ namespace Nizam.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _auth;
+    private readonly IPinAuthService _pinAuth;
     private readonly IPasswordService _passwordService;
     private readonly IConfiguration _config;
 
-    public AuthController(IAuthService auth, IPasswordService passwordService, IConfiguration config)
+    public AuthController(IAuthService auth, IPinAuthService pinAuth, IPasswordService passwordService, IConfiguration config)
     {
         _auth = auth;
+        _pinAuth = pinAuth;
         _passwordService = passwordService;
         _config = config;
     }
@@ -35,6 +40,23 @@ public class AuthController : ControllerBase
     {
         var user = await _auth.LoginAsync(dto, ct);
         return Ok(user);
+    }
+
+    /// <summary>Quick login on a shared POS device: tenant slug + numeric PIN → JWT.
+    /// Rate-limited (shares the login policy) since PINs are low-entropy.</summary>
+    [HttpPost("pin-login")]
+    [EnableRateLimiting("login")]
+    public async Task<ActionResult<UserDto>> PinLogin(PinLoginDto dto, CancellationToken ct)
+        => Ok(await _pinAuth.PinLoginAsync(dto, ct));
+
+    /// <summary>Set/change a user's PIN. Admin action (ManageUsers).</summary>
+    [HttpPut("users/{id:int}/pin")]
+    [Authorize]
+    [HasPermission(UserPermissions.ManageUsers)]
+    public async Task<ActionResult> SetPin(int id, SetPinDto dto, CancellationToken ct)
+    {
+        await _pinAuth.SetPinAsync(id, dto.Pin, ct);
+        return NoContent();
     }
 
     [HttpGet("users")]

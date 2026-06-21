@@ -32,6 +32,7 @@ public static class ApplicationServicesExtensions
         // simpler and EF Core global query filters will handle multi-tenancy at the
         // DbContext level when that lands.
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IPinAuthService, PinAuthService>();
         services.AddScoped<IAdminService, AdminService>();
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<ICustomerService, CustomerService>();
