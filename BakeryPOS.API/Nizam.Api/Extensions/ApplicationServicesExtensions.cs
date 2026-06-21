@@ -55,6 +55,7 @@ public static class ApplicationServicesExtensions
         services.AddScoped<IKdsService, KdsService>();
         services.AddScoped<ICheckService, CheckService>();
         services.AddScoped<IOrderAdjustmentService, OrderAdjustmentService>();
+        services.AddScoped<IReservationService, ReservationService>();
         // Order state machine is pure logic; safe as singleton.
         services.AddSingleton<IOrderStateMachine, OrderStateMachine>();
 
@@ -72,6 +73,7 @@ public static class ApplicationServicesExtensions
         // job invocation gets a fresh instance with fresh AppDbContext.
         services.AddTransient<DatabaseBackupJob>();
         services.AddTransient<DailyReportsJob>();
+        services.AddTransient<ReservationReminderJob>();
 
         return services;
     }

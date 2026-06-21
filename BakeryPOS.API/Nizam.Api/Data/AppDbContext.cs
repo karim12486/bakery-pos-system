@@ -68,6 +68,9 @@ namespace Nizam.Api.Data
         public DbSet<Check> Checks { get; set; }
         public DbSet<CheckItem> CheckItems { get; set; }
 
+        // Phase B: table reservations (controllers gated by [RequiresFeature("tables")]).
+        public DbSet<Reservation> Reservations { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -325,6 +328,19 @@ namespace Nizam.Api.Data
                 e.HasIndex(x => new { x.TenantId, x.OrderItemId }).IsUnique();
                 e.HasIndex(x => new { x.TenantId, x.CheckId });
             });
+            modelBuilder.Entity<Reservation>(e =>
+            {
+                e.Property(x => x.CustomerName).HasMaxLength(120).IsRequired();
+                e.Property(x => x.Phone).HasMaxLength(30);
+                e.Property(x => x.Notes).HasMaxLength(300);
+                e.Property(x => x.Status).HasMaxLength(20).HasConversion<string>();
+                e.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasOne(x => x.Table).WithMany().HasForeignKey(x => x.TableId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                e.HasIndex(x => new { x.TenantId, x.BranchId, x.ReservedFor });
+                e.HasIndex(x => new { x.TenantId, x.Status });
+            });
             // Category → KitchenStation routing (nullable; SetNull so deleting a station
             // un-routes its categories rather than cascading them away).
             modelBuilder.Entity<Category>(e =>
@@ -372,6 +388,7 @@ namespace Nizam.Api.Data
             modelBuilder.Entity<KitchenStation>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<Check>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<CheckItem>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<Reservation>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             // Tenants + Plans + PlanFeatures + PlanLimits are NOT filtered — they're tenant-agnostic
             // master data (login flow, plan lookup, admin operations).
         }

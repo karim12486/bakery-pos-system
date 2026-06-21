@@ -101,6 +101,12 @@ public static class HangfireExtensions
             DailyReportsJob.Cron,
             new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 
+        recurring.AddOrUpdate<ReservationReminderJob>(
+            ReservationReminderJob.RecurringJobId,
+            j => j.RunAsync(CancellationToken.None),
+            ReservationReminderJob.Cron,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
         return app;
     }
 }
