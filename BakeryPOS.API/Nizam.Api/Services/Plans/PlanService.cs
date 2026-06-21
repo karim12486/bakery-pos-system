@@ -123,10 +123,25 @@ public sealed class PlanService : IPlanService
             return null;
         }
 
+        var features = new HashSet<string>(tenant.Plan.Features.Select(f => f.FeatureKey), StringComparer.Ordinal);
+
+        // Apply per-tenant overrides on top of the plan's features: enabled=true grants a
+        // feature (add-on purchase), enabled=false revokes one (clawback). Expired rows ignored.
+        var now = DateTime.UtcNow;
+        var overrides = await _context.TenantFeatureOverrides
+            .IgnoreQueryFilters()
+            .Where(o => o.TenantId == tenantId && (o.ExpiresAt == null || o.ExpiresAt > now))
+            .ToListAsync(ct);
+        foreach (var o in overrides)
+        {
+            if (o.Enabled) features.Add(o.FeatureKey);
+            else features.Remove(o.FeatureKey);
+        }
+
         var snapshot = new PlanSnapshot(
             Plan: tenant.Plan,
             PlanCode: tenant.Plan.Code,
-            Features: new HashSet<string>(tenant.Plan.Features.Select(f => f.FeatureKey), StringComparer.Ordinal),
+            Features: features,
             Limits: tenant.Plan.Limits.ToDictionary(l => l.LimitKey, l => l.Value, StringComparer.Ordinal));
 
         _cache.Set(key, snapshot, new MemoryCacheEntryOptions

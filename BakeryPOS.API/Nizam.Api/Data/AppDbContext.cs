@@ -22,6 +22,10 @@ namespace Nizam.Api.Data
         public DbSet<PlanFeature> PlanFeatures { get; set; }
         public DbSet<PlanLimit> PlanLimits { get; set; }
 
+        /// <summary>Per-tenant feature overrides (add-on grants / clawbacks). Managed by the
+        /// super-admin / billing paths; consumed by PlanService when building the feature set.</summary>
+        public DbSet<TenantFeatureOverride> TenantFeatureOverrides { get; set; }
+
         // Existing entities (all now have TenantId; the four operational ones also have BranchId).
         public DbSet<User> Users { get; set; }
         public DbSet<Product> Products { get; set; }
@@ -327,6 +331,13 @@ namespace Nizam.Api.Data
                 // An order item belongs to at most one check.
                 e.HasIndex(x => new { x.TenantId, x.OrderItemId }).IsUnique();
                 e.HasIndex(x => new { x.TenantId, x.CheckId });
+            });
+            modelBuilder.Entity<TenantFeatureOverride>(e =>
+            {
+                e.Property(x => x.FeatureKey).HasMaxLength(60).IsRequired();
+                e.Property(x => x.Reason).HasMaxLength(200);
+                // One override row per (tenant, feature).
+                e.HasIndex(x => new { x.TenantId, x.FeatureKey }).IsUnique();
             });
             modelBuilder.Entity<Reservation>(e =>
             {

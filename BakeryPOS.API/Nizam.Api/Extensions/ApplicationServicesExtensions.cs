@@ -66,6 +66,7 @@ public static class ApplicationServicesExtensions
         // (5-min sliding TTL, invalidated on plan change by the super-admin portal).
         services.AddMemoryCache();
         services.AddScoped<IPlanService, PlanService>();
+        services.AddScoped<ITenantFeatureOverrideService, TenantFeatureOverrideService>();
 
         // Outbound HTTP (used by the Telegram notifier; pooled by the framework)
         services.AddHttpClient();
