@@ -64,6 +64,10 @@ namespace Nizam.Api.Data
         /// KDS screens display per (branch, station).</summary>
         public DbSet<KitchenStation> KitchenStations { get; set; }
 
+        // Phase B: split-bill checks (controllers gated by [RequiresFeature("split_check")]).
+        public DbSet<Check> Checks { get; set; }
+        public DbSet<CheckItem> CheckItems { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -302,6 +306,25 @@ namespace Nizam.Api.Data
                 e.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
                 e.HasIndex(x => new { x.TenantId, x.SortOrder });
             });
+            modelBuilder.Entity<Check>(e =>
+            {
+                e.Property(x => x.Label).HasMaxLength(60).IsRequired();
+                e.Property(x => x.Status).HasMaxLength(20).HasConversion<string>();
+                e.Property(x => x.PaymentMethod).HasMaxLength(20).HasConversion<string>();
+                e.HasOne(x => x.Order).WithMany().HasForeignKey(x => x.OrderId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasIndex(x => new { x.TenantId, x.OrderId });
+            });
+            modelBuilder.Entity<CheckItem>(e =>
+            {
+                e.HasOne(x => x.Check).WithMany(c => c.Items).HasForeignKey(x => x.CheckId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasOne(x => x.OrderItem).WithMany().HasForeignKey(x => x.OrderItemId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                // An order item belongs to at most one check.
+                e.HasIndex(x => new { x.TenantId, x.OrderItemId }).IsUnique();
+                e.HasIndex(x => new { x.TenantId, x.CheckId });
+            });
             // Category → KitchenStation routing (nullable; SetNull so deleting a station
             // un-routes its categories rather than cascading them away).
             modelBuilder.Entity<Category>(e =>
@@ -347,6 +370,8 @@ namespace Nizam.Api.Data
             modelBuilder.Entity<Table>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<TableSession>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<KitchenStation>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<Check>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<CheckItem>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             // Tenants + Plans + PlanFeatures + PlanLimits are NOT filtered — they're tenant-agnostic
             // master data (login flow, plan lookup, admin operations).
         }
