@@ -418,4 +418,51 @@ public class DineInServiceTests
             () => svc.MergeAsync(session!.Id, session.Id, CancellationToken.None));
         Assert.Equal("ERR_MERGE_SAME_SESSION", ex.ErrorCode);
     }
+
+    // ----- Coursing -----------------------------------------------------------------
+
+    [Fact]
+    public async Task FireCourse_FiresOnlyThatCourse()
+    {
+        var s = await SeedAsync();
+        var svc = Build(s.Ctx);
+        var (orderId, productId, _) = await SeatWithProductAsync(s, svc);
+
+        // Course 1 (appetizer) + course 2 (main).
+        await svc.AddItemsAsync(orderId, new AddOrderItemsDto
+        {
+            Items = new()
+            {
+                new() { ProductId = productId, Quantity = 1, CourseNumber = 1 },
+                new() { ProductId = productId, Quantity = 1, CourseNumber = 2 },
+            }
+        }, CancellationToken.None);
+
+        var afterCourse1 = await svc.FireCourseAsync(orderId, 1, CancellationToken.None);
+
+        var c1 = afterCourse1.Items.Single(i => i.CourseNumber == 1);
+        var c2 = afterCourse1.Items.Single(i => i.CourseNumber == 2);
+        Assert.Equal("Fired", c1.Status);     // appetizer fired
+        Assert.Equal("Pending", c2.Status);   // main still waiting
+
+        // Now fire course 2.
+        var afterCourse2 = await svc.FireCourseAsync(orderId, 2, CancellationToken.None);
+        Assert.Equal("Fired", afterCourse2.Items.Single(i => i.CourseNumber == 2).Status);
+    }
+
+    [Fact]
+    public async Task FireCourse_NoPendingInCourse_Throws()
+    {
+        var s = await SeedAsync();
+        var svc = Build(s.Ctx);
+        var (orderId, productId, _) = await SeatWithProductAsync(s, svc);
+        await svc.AddItemsAsync(orderId, new AddOrderItemsDto
+        {
+            Items = new() { new() { ProductId = productId, Quantity = 1, CourseNumber = 1 } }
+        }, CancellationToken.None);
+
+        var ex = await Assert.ThrowsAsync<DomainConflictException>(
+            () => svc.FireCourseAsync(orderId, 3, CancellationToken.None)); // no course-3 items
+        Assert.Equal("ERR_NO_PENDING_IN_COURSE", ex.ErrorCode);
+    }
 }

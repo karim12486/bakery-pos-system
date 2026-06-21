@@ -52,6 +52,11 @@ public class OrderItem
     /// Denormalised so changing a category's station later doesn't re-route historical items.</summary>
     public int? KitchenStationId { get; set; }
 
+    /// <summary>Coursing: which course this item belongs to (1 = first/appetizers, 2 = mains,
+    /// 3 = dessert, …). Defaults to 1. Servers fire a whole course at once so the kitchen
+    /// paces the meal. Phase B / dine-in.</summary>
+    public int CourseNumber { get; set; } = 1;
+
     /// <summary>Kitchen-side state. Phase A items go straight to <c>Closed</c>.</summary>
     public OrderItemStatus Status { get; set; } = OrderItemStatus.Closed;
 

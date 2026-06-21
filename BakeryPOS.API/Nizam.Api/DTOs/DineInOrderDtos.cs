@@ -24,6 +24,7 @@ public class DineInOrderItemDto
     public decimal LineTotal { get; set; }
     public string Status { get; set; } = string.Empty;
     public int? KitchenStationId { get; set; }
+    public int CourseNumber { get; set; }
     public IReadOnlyList<string> Modifiers { get; set; } = Array.Empty<string>();
 }
 

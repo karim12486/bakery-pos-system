@@ -47,6 +47,10 @@ public interface IDineInService
     /// <summary>Fires all Pending items on the order to the kitchen (Pending → Fired), stamping
     /// FiredAt and broadcasting each to its KDS station screen.</summary>
     Task<DineInOrderDto> FireOrderAsync(int orderId, CancellationToken ct);
+
+    /// <summary>Fires only the Pending items in a given course — lets the server pace the meal
+    /// (fire appetizers now, mains later).</summary>
+    Task<DineInOrderDto> FireCourseAsync(int orderId, int courseNumber, CancellationToken ct);
 }
 
 public sealed class DineInService : IDineInService
@@ -344,6 +348,7 @@ public sealed class DineInService : IDineInService
                 TaxAmount = 0,
                 Modifiers = "[]",
                 KitchenStationId = stationId,
+                CourseNumber = line.CourseNumber < 1 ? 1 : line.CourseNumber,
                 Status = OrderItemStatus.Pending, // not fired until the server sends it
             };
             foreach (var snap in modifierResult.Snapshots) orderItem.AppliedModifiers.Add(snap);
@@ -368,6 +373,27 @@ public sealed class DineInService : IDineInService
 
         // Delegate per-item to the KDS service so firing here behaves identically to firing
         // from a KDS screen (FiredAt stamp + station broadcast), no duplicated logic.
+        foreach (var itemId in pending)
+            await _kds.FireAsync(itemId, ct);
+
+        return await ProjectOrderAsync(orderId, ct);
+    }
+
+    public async Task<DineInOrderDto> FireCourseAsync(int orderId, int courseNumber, CancellationToken ct)
+    {
+        await LoadDineInOrderAsync(orderId, ct);
+
+        var pending = await _context.OrderItems
+            .Where(oi => oi.OrderId == orderId
+                         && oi.CourseNumber == courseNumber
+                         && oi.Status == OrderItemStatus.Pending)
+            .Select(oi => oi.Id)
+            .ToListAsync(ct);
+
+        if (pending.Count == 0)
+            throw new DomainConflictException("ERR_NO_PENDING_IN_COURSE",
+                $"No pending items in course {courseNumber}.");
+
         foreach (var itemId in pending)
             await _kds.FireAsync(itemId, ct);
 
@@ -424,6 +450,7 @@ public sealed class DineInService : IDineInService
                 LineTotal = oi.LineTotal,
                 Status = oi.Status.ToString(),
                 KitchenStationId = oi.KitchenStationId,
+                CourseNumber = oi.CourseNumber,
                 Modifiers = oi.AppliedModifiers.Select(m => m.Name).ToList(),
             }).ToList(),
         };

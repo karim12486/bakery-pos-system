@@ -101,4 +101,10 @@ public class DineInController : ControllerBase
     [HasPermission(UserPermissions.ProcessSales)]
     public async Task<ActionResult<DineInOrderDto>> FireOrder(int orderId, CancellationToken ct)
         => Ok(await _dineIn.FireOrderAsync(orderId, ct));
+
+    /// <summary>Fire only the Pending items in a course (pace the meal).</summary>
+    [HttpPost("orders/{orderId:int}/fire-course/{courseNumber:int}")]
+    [HasPermission(UserPermissions.ProcessSales)]
+    public async Task<ActionResult<DineInOrderDto>> FireCourse(int orderId, int courseNumber, CancellationToken ct)
+        => Ok(await _dineIn.FireCourseAsync(orderId, courseNumber, ct));
 }
