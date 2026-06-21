@@ -59,5 +59,9 @@ public class Order
     /// <summary>Optional free-form notes (special instructions, customer preferences).</summary>
     public string? Notes { get; set; }
 
+    /// <summary>True when the order's items were submitted by a guest via the QR table menu
+    /// (Phase B.5). Staff review such items (they start Pending) before firing to the kitchen.</summary>
+    public bool IsCustomerSubmitted { get; set; }
+
     public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
 }

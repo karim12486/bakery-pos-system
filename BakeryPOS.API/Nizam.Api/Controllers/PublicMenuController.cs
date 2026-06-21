@@ -19,14 +19,23 @@ namespace Nizam.Api.Controllers;
 public class PublicMenuController : ControllerBase
 {
     private readonly IPublicMenuService _menu;
+    private readonly IPublicOrderService _orders;
 
-    public PublicMenuController(IPublicMenuService menu)
+    public PublicMenuController(IPublicMenuService menu, IPublicOrderService orders)
     {
         _menu = menu;
+        _orders = orders;
     }
 
     [HttpGet("{tenantSlug}/menu")]
     [ResponseCache(Duration = 60)] // a menu rarely changes minute-to-minute; cache at the edge
     public async Task<ActionResult<PublicMenuDto>> Get(string tenantSlug, CancellationToken ct)
         => Ok(await _menu.GetMenuAsync(tenantSlug, ct));
+
+    /// <summary>A seated guest submits items from their table. They land as Pending on the
+    /// table's open order for staff to review and fire. Requires an open session at the table.</summary>
+    [HttpPost("{tenantSlug}/orders")]
+    public async Task<ActionResult<DineInOrderDto>> SubmitOrder(
+        string tenantSlug, PublicOrderRequest request, CancellationToken ct)
+        => Ok(await _orders.SubmitAsync(tenantSlug, request, ct));
 }

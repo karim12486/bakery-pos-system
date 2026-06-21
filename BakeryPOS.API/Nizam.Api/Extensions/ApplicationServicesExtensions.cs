@@ -57,6 +57,7 @@ public static class ApplicationServicesExtensions
         services.AddScoped<IOrderAdjustmentService, OrderAdjustmentService>();
         services.AddScoped<IReservationService, ReservationService>();
         services.AddScoped<IPublicMenuService, PublicMenuService>();
+        services.AddScoped<IPublicOrderService, PublicOrderService>();
         // Order state machine is pure logic; safe as singleton.
         services.AddSingleton<IOrderStateMachine, OrderStateMachine>();
 
