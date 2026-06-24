@@ -127,6 +127,7 @@ public sealed class SuperAdminService : ISuperAdminService
             throw new DomainNotFoundException("ERR_PLAN_NOT_FOUND", $"Plan '{planCode}' introuvable ou inactif.");
 
         tenant.PlanCode = planCode;
+        tenant.TrialEndsAt = null; // a deliberate plan change = conversion; off the trial track
         await _context.SaveChangesAsync(ct);
         _plans.InvalidateCache(tenantId); // new plan entitlements take effect immediately
     }

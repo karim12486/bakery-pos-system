@@ -78,6 +78,7 @@ public static class ApplicationServicesExtensions
         services.AddTransient<DatabaseBackupJob>();
         services.AddTransient<DailyReportsJob>();
         services.AddTransient<ReservationReminderJob>();
+        services.AddTransient<TrialDowngradeJob>();
 
         return services;
     }
