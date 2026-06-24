@@ -26,5 +26,9 @@ namespace Nizam.Api.DTOs
         public decimal? SplitCashAmount { get; set; }
         public decimal? SplitCardAmount { get; set; }
 
+        /// <summary>Optional promotion coupon code to apply to this sale. The promo discount is
+        /// added on top of any customer (Premium) discount.</summary>
+        public string? PromoCode { get; set; }
+
     }
 }

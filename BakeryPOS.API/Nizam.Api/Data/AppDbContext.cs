@@ -78,6 +78,9 @@ namespace Nizam.Api.Data
         // Phase B: table reservations (controllers gated by [RequiresFeature("tables")]).
         public DbSet<Reservation> Reservations { get; set; }
 
+        // Phase 3: promotions (controllers gated by [RequiresFeature("promotions")]).
+        public DbSet<Promotion> Promotions { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -348,6 +351,14 @@ namespace Nizam.Api.Data
                 e.Property(x => x.FullName).HasMaxLength(120);
                 e.HasIndex(x => x.Username).IsUnique();
             });
+            modelBuilder.Entity<Promotion>(e =>
+            {
+                e.Property(x => x.Name).HasMaxLength(120).IsRequired();
+                e.Property(x => x.Code).HasMaxLength(40);
+                e.Property(x => x.Type).HasMaxLength(20).HasConversion<string>();
+                // Coupon code unique per tenant (filtered to non-null in queries by lookup).
+                e.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
+            });
             modelBuilder.Entity<Reservation>(e =>
             {
                 e.Property(x => x.CustomerName).HasMaxLength(120).IsRequired();
@@ -409,6 +420,7 @@ namespace Nizam.Api.Data
             modelBuilder.Entity<Check>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<CheckItem>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<Reservation>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<Promotion>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             // Tenants + Plans + PlanFeatures + PlanLimits are NOT filtered — they're tenant-agnostic
             // master data (login flow, plan lookup, admin operations).
         }

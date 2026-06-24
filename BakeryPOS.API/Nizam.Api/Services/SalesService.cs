@@ -30,6 +30,7 @@ public sealed class SalesService : ISalesService
     private readonly IAuditService _audit;
     private readonly IModifierApplicationService _modifierApp;
     private readonly IOrderStateMachine _orderStates;
+    private readonly IPromotionService _promotions;
 
     public SalesService(
         AppDbContext context,
@@ -37,7 +38,8 @@ public sealed class SalesService : ISalesService
         IValidator<SaleForCreateDto> createValidator,
         IAuditService audit,
         IModifierApplicationService modifierApp,
-        IOrderStateMachine orderStates)
+        IOrderStateMachine orderStates,
+        IPromotionService promotions)
     {
         _context = context;
         _mapper = mapper;
@@ -45,6 +47,7 @@ public sealed class SalesService : ISalesService
         _audit = audit;
         _modifierApp = modifierApp;
         _orderStates = orderStates;
+        _promotions = promotions;
     }
 
     public async Task<PagedResponse<SaleListDto>> ListAsync(
@@ -153,6 +156,22 @@ public sealed class SalesService : ISalesService
             if (customer.DiscountPercentage > 0)
                 discountAmount = totalAmount * (customer.DiscountPercentage / 100);
         }
+
+        // Promotion (coupon or auto-apply) — stacks on top of any customer discount. Evaluated
+        // against the pre-discount subtotal. Redemption is recorded after the sale commits.
+        int? appliedPromoId = null;
+        if (!string.IsNullOrWhiteSpace(dto.PromoCode))
+        {
+            var promo = await _promotions.EvaluateAsync(dto.PromoCode, totalAmount, ct);
+            if (promo != null)
+            {
+                discountAmount += promo.DiscountAmount;
+                appliedPromoId = promo.PromotionId;
+            }
+        }
+
+        // Discount can't exceed the order total.
+        if (discountAmount > totalAmount) discountAmount = totalAmount;
         var finalAmount = totalAmount - discountAmount;
 
         // Payment math (preserved from original controller).
@@ -266,6 +285,10 @@ public sealed class SalesService : ISalesService
 
         await _context.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+
+        // Count the promo redemption after the sale is durably committed.
+        if (appliedPromoId is int promoId)
+            await _promotions.RecordRedemptionAsync(promoId, ct);
 
         await _audit.LogAsync(AuditActions.SaleCreated, "Sale", newSale.Id,
             $"order={newOrder.Id};final={finalAmount};method={dto.PaymentMethod};owed={amountOwed}", ct: ct);
