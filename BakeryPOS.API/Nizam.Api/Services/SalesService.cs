@@ -31,6 +31,7 @@ public sealed class SalesService : ISalesService
     private readonly IModifierApplicationService _modifierApp;
     private readonly IOrderStateMachine _orderStates;
     private readonly IPromotionService _promotions;
+    private readonly ILoyaltyService _loyalty;
 
     public SalesService(
         AppDbContext context,
@@ -39,7 +40,8 @@ public sealed class SalesService : ISalesService
         IAuditService audit,
         IModifierApplicationService modifierApp,
         IOrderStateMachine orderStates,
-        IPromotionService promotions)
+        IPromotionService promotions,
+        ILoyaltyService loyalty)
     {
         _context = context;
         _mapper = mapper;
@@ -48,6 +50,7 @@ public sealed class SalesService : ISalesService
         _modifierApp = modifierApp;
         _orderStates = orderStates;
         _promotions = promotions;
+        _loyalty = loyalty;
     }
 
     public async Task<PagedResponse<SaleListDto>> ListAsync(
@@ -289,6 +292,11 @@ public sealed class SalesService : ISalesService
         // Count the promo redemption after the sale is durably committed.
         if (appliedPromoId is int promoId)
             await _promotions.RecordRedemptionAsync(promoId, ct);
+
+        // Earn loyalty points on the paid amount (no-op unless a customer is attached and the
+        // tenant runs an active loyalty program).
+        if (customer != null)
+            await _loyalty.EarnFromSaleAsync(customer.Id, finalAmount, newSale.Id, ct);
 
         await _audit.LogAsync(AuditActions.SaleCreated, "Sale", newSale.Id,
             $"order={newOrder.Id};final={finalAmount};method={dto.PaymentMethod};owed={amountOwed}", ct: ct);

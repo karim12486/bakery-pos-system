@@ -81,6 +81,11 @@ namespace Nizam.Api.Data
         // Phase 3: promotions (controllers gated by [RequiresFeature("promotions")]).
         public DbSet<Promotion> Promotions { get; set; }
 
+        // Phase 3: loyalty (controllers gated by [RequiresFeature("loyalty")]).
+        public DbSet<LoyaltyProgram> LoyaltyPrograms { get; set; }
+        public DbSet<LoyaltyAccount> LoyaltyAccounts { get; set; }
+        public DbSet<LoyaltyTransaction> LoyaltyTransactions { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -359,6 +364,26 @@ namespace Nizam.Api.Data
                 // Coupon code unique per tenant (filtered to non-null in queries by lookup).
                 e.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
             });
+            modelBuilder.Entity<LoyaltyProgram>(e =>
+            {
+                // One program per tenant.
+                e.HasIndex(x => x.TenantId).IsUnique();
+            });
+            modelBuilder.Entity<LoyaltyAccount>(e =>
+            {
+                e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // One wallet per (tenant, customer).
+                e.HasIndex(x => new { x.TenantId, x.CustomerId }).IsUnique();
+            });
+            modelBuilder.Entity<LoyaltyTransaction>(e =>
+            {
+                e.Property(x => x.Type).HasMaxLength(20).HasConversion<string>();
+                e.Property(x => x.Reason).HasMaxLength(200);
+                e.HasOne(x => x.Account).WithMany(a => a.Transactions).HasForeignKey(x => x.LoyaltyAccountId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasIndex(x => new { x.TenantId, x.LoyaltyAccountId, x.CreatedAt });
+            });
             modelBuilder.Entity<Reservation>(e =>
             {
                 e.Property(x => x.CustomerName).HasMaxLength(120).IsRequired();
@@ -421,6 +446,9 @@ namespace Nizam.Api.Data
             modelBuilder.Entity<CheckItem>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<Reservation>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<Promotion>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<LoyaltyProgram>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<LoyaltyAccount>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<LoyaltyTransaction>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             // Tenants + Plans + PlanFeatures + PlanLimits are NOT filtered — they're tenant-agnostic
             // master data (login flow, plan lookup, admin operations).
         }
