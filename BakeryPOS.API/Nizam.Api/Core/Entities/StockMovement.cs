@@ -5,7 +5,11 @@
         Addition,      // Manually adding new stock
         Sale,          // Stock removed due to a sale
         Return,        // Stock added due to a return
-        Adjustment     // Manual correction (e.g., due to spoilage or counting error)
+        Adjustment,    // Manual correction (e.g., due to spoilage or counting error)
+        Purchase,      // Stock received against a purchase order (Phase 3.7)
+        Waste,         // Stock written off via the waste log (Phase 3.7)
+        TransferOut,   // Stock dispatched to another branch (Phase 3.7)
+        TransferIn     // Stock received from another branch (Phase 3.7)
     }
 
     public class StockMovement

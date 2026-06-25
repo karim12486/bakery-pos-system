@@ -89,6 +89,14 @@ namespace Nizam.Api.Data
         // Phase 3.6: per-tenant messaging config (gated by [RequiresFeature("messaging_notifications")]).
         public DbSet<MessagingConfig> MessagingConfigs { get; set; }
 
+        // Phase 3.7: inventory ops (gated by [RequiresFeature("inventory_ops")]).
+        public DbSet<Supplier> Suppliers { get; set; }
+        public DbSet<PurchaseOrder> PurchaseOrders { get; set; }
+        public DbSet<PurchaseOrderItem> PurchaseOrderItems { get; set; }
+        public DbSet<StockTransfer> StockTransfers { get; set; }
+        public DbSet<StockTransferItem> StockTransferItems { get; set; }
+        public DbSet<WasteLogEntry> WasteLogEntries { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -398,6 +406,57 @@ namespace Nizam.Api.Data
                 // One config row per tenant.
                 e.HasIndex(x => x.TenantId).IsUnique();
             });
+            modelBuilder.Entity<Supplier>(e =>
+            {
+                e.Property(x => x.Name).HasMaxLength(160).IsRequired();
+                e.Property(x => x.ContactName).HasMaxLength(120);
+                e.Property(x => x.Phone).HasMaxLength(30);
+                e.Property(x => x.Email).HasMaxLength(160);
+                e.Property(x => x.Notes).HasMaxLength(500);
+                e.HasIndex(x => new { x.TenantId, x.Name });
+            });
+            modelBuilder.Entity<PurchaseOrder>(e =>
+            {
+                e.Property(x => x.Status).HasMaxLength(20).HasConversion<string>();
+                e.Property(x => x.Reference).HasMaxLength(80);
+                e.Property(x => x.Notes).HasMaxLength(500);
+                e.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                e.HasMany(x => x.Items).WithOne(i => i.PurchaseOrder).HasForeignKey(i => i.PurchaseOrderId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasIndex(x => new { x.TenantId, x.Status });
+            });
+            modelBuilder.Entity<PurchaseOrderItem>(e =>
+            {
+                e.Property(x => x.UnitCost).HasColumnType("decimal(18,2)");
+                e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                e.HasIndex(x => new { x.TenantId, x.PurchaseOrderId });
+            });
+            modelBuilder.Entity<StockTransfer>(e =>
+            {
+                e.Property(x => x.Status).HasMaxLength(20).HasConversion<string>();
+                e.Property(x => x.Reference).HasMaxLength(80);
+                e.Property(x => x.Notes).HasMaxLength(500);
+                e.HasMany(x => x.Items).WithOne(i => i.StockTransfer).HasForeignKey(i => i.StockTransferId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                e.HasIndex(x => new { x.TenantId, x.Status });
+            });
+            modelBuilder.Entity<StockTransferItem>(e =>
+            {
+                e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                e.HasIndex(x => new { x.TenantId, x.StockTransferId });
+            });
+            modelBuilder.Entity<WasteLogEntry>(e =>
+            {
+                e.Property(x => x.Reason).HasMaxLength(20).HasConversion<string>();
+                e.Property(x => x.EstimatedCost).HasColumnType("decimal(18,2)");
+                e.Property(x => x.Notes).HasMaxLength(500);
+                e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                e.HasIndex(x => new { x.TenantId, x.CreatedAt });
+            });
             modelBuilder.Entity<Reservation>(e =>
             {
                 e.Property(x => x.CustomerName).HasMaxLength(120).IsRequired();
@@ -464,6 +523,12 @@ namespace Nizam.Api.Data
             modelBuilder.Entity<LoyaltyAccount>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<LoyaltyTransaction>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<MessagingConfig>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<Supplier>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<PurchaseOrder>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<PurchaseOrderItem>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<StockTransfer>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<StockTransferItem>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<WasteLogEntry>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             // Tenants + Plans + PlanFeatures + PlanLimits are NOT filtered — they're tenant-agnostic
             // master data (login flow, plan lookup, admin operations).
         }

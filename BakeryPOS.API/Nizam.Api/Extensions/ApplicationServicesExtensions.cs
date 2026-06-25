@@ -65,6 +65,11 @@ public static class ApplicationServicesExtensions
         services.AddScoped<IPromotionService, PromotionService>();
         services.AddScoped<ILoyaltyService, LoyaltyService>();
         services.AddScoped<IMessagingConfigService, MessagingConfigService>();
+        // Phase 3.7: inventory ops (Inventory Pack add-on — gated by inventory_ops).
+        services.AddScoped<ISupplierService, SupplierService>();
+        services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
+        services.AddScoped<IStockTransferService, StockTransferService>();
+        services.AddScoped<IWasteLogService, WasteLogService>();
         // Order state machine is pure logic; safe as singleton.
         services.AddSingleton<IOrderStateMachine, OrderStateMachine>();
 
