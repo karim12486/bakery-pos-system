@@ -21,7 +21,10 @@ public static class ApplicationServicesExtensions
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IReportGenerationService, ReportGenerationService>();
         services.AddScoped<IPdfGenerationService, PdfGenerationService>();
-        services.AddScoped<INotificationService, TelegramNotificationService>();
+        // Phase 3.6: per-tenant messaging. The dispatcher resolves the current tenant's
+        // MessagingConfig and routes to Telegram/WhatsApp, falling back to the legacy global
+        // appsettings Telegram bot when a tenant hasn't configured a channel.
+        services.AddScoped<INotificationService, TenantNotificationDispatcher>();
 
         // Per-feature application services. Controllers are thin shells that bind →
         // delegate to these. Each service centralises validation, transaction wrapping,
@@ -61,6 +64,7 @@ public static class ApplicationServicesExtensions
         services.AddScoped<IPublicOrderService, PublicOrderService>();
         services.AddScoped<IPromotionService, PromotionService>();
         services.AddScoped<ILoyaltyService, LoyaltyService>();
+        services.AddScoped<IMessagingConfigService, MessagingConfigService>();
         // Order state machine is pure logic; safe as singleton.
         services.AddSingleton<IOrderStateMachine, OrderStateMachine>();
 

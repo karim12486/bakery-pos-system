@@ -86,6 +86,9 @@ namespace Nizam.Api.Data
         public DbSet<LoyaltyAccount> LoyaltyAccounts { get; set; }
         public DbSet<LoyaltyTransaction> LoyaltyTransactions { get; set; }
 
+        // Phase 3.6: per-tenant messaging config (gated by [RequiresFeature("messaging_notifications")]).
+        public DbSet<MessagingConfig> MessagingConfigs { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -384,6 +387,17 @@ namespace Nizam.Api.Data
                     .OnDelete(DeleteBehavior.Cascade);
                 e.HasIndex(x => new { x.TenantId, x.LoyaltyAccountId, x.CreatedAt });
             });
+            modelBuilder.Entity<MessagingConfig>(e =>
+            {
+                e.Property(x => x.Channel).HasMaxLength(20).HasConversion<string>();
+                e.Property(x => x.TelegramBotToken).HasMaxLength(200);
+                e.Property(x => x.TelegramChatId).HasMaxLength(100);
+                e.Property(x => x.WhatsAppPhoneNumberId).HasMaxLength(100);
+                e.Property(x => x.WhatsAppAccessToken).HasMaxLength(500);
+                e.Property(x => x.WhatsAppRecipient).HasMaxLength(50);
+                // One config row per tenant.
+                e.HasIndex(x => x.TenantId).IsUnique();
+            });
             modelBuilder.Entity<Reservation>(e =>
             {
                 e.Property(x => x.CustomerName).HasMaxLength(120).IsRequired();
@@ -449,6 +463,7 @@ namespace Nizam.Api.Data
             modelBuilder.Entity<LoyaltyProgram>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<LoyaltyAccount>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             modelBuilder.Entity<LoyaltyTransaction>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
+            modelBuilder.Entity<MessagingConfig>().HasQueryFilter(x => x.TenantId == _currentTenant.TenantId);
             // Tenants + Plans + PlanFeatures + PlanLimits are NOT filtered — they're tenant-agnostic
             // master data (login flow, plan lookup, admin operations).
         }
